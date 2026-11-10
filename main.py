@@ -1007,7 +1007,7 @@ def find_hlos(enable_fused_speculation=False):
 def main():
     args = parse_args()
     
-    os.environ['NEURON_PLATFORM_TARGET_OVERRIDE'] = "trn3"
+    os.environ['NEURON_PLATFORM_TARGET_OVERRIDE'] = args.platform_target
 
     if not args.prompts:
         args.prompts = ["I believe the meaning of life is"]

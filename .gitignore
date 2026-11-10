@@ -12,3 +12,7 @@ output/
 *.ntff
 *.pb
 megakernels/qwen3_6_moe/*.html
+
+# Benchmark outputs written to cwd by main.py
+benchmark_report.json
+qwen3-30b-a3b-trn2_score_records.csv

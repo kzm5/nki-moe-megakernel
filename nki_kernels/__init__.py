@@ -19,34 +19,43 @@ Layout (see README.md for the full map):
 - ``specs/``               design specs for individual kernels.
 """
 
-# Decode (TKG).
-from .deltanet.decode.fused_layer import (
-    deltanet_fused_tkg_fwd,
-    deltanet_fused_tkg_fwd_state,
-    deltanet_attention_layer_state,
-)
-from .deltanet.decode.recurrent import (
-    deltanet_recurrent_fwd,
-    deltanet_recurrent_fwd_state,
-)
+import importlib
 
-# Prefill (CTE).
-from .deltanet.prefill.chunked_step import deltanet_chunk_step
-from .deltanet.prefill.chunked_fused import (
-    deltanet_fused_chunked_fwd,
-    _make_lower_mask,
-    _make_lower_mask_diag,
-    _make_identity,
-)
+# Public name -> defining submodule; imported on first attribute access.
+_LAZY_EXPORTS = {
+    # Decode (TKG).
+    "deltanet_fused_tkg_fwd": ".deltanet.decode.fused_layer",
+    "deltanet_fused_tkg_fwd_state": ".deltanet.decode.fused_layer",
+    "deltanet_attention_layer_state": ".deltanet.decode.fused_layer",
+    "deltanet_recurrent_fwd": ".deltanet.decode.recurrent",
+    "deltanet_recurrent_fwd_state": ".deltanet.decode.recurrent",
+    # Prefill (CTE).
+    "deltanet_chunk_step": ".deltanet.prefill.chunked_step",
+    "deltanet_fused_chunked_fwd": ".deltanet.prefill.chunked_fused",
+    "_make_lower_mask": ".deltanet.prefill.chunked_fused",
+    "_make_lower_mask_diag": ".deltanet.prefill.chunked_fused",
+    "_make_identity": ".deltanet.prefill.chunked_fused",
+    # GQA (full-attention) decode/verify TKG megakernel.
+    "gqa_fused_tkg_fwd": ".gqa",
+    # MoE (post-attention FFN) fused-layer verify kernel.
+    "moe_layer_fwd": ".moe",
+    # LM head (final norm + vocab projection + per-rank greedy argmax), shared by both heads.
+    "lm_head_fwd": ".lm_head",
+}
 
-# GQA (full-attention) decode/verify TKG megakernel.
-from .gqa import gqa_fused_tkg_fwd
 
-# MoE (post-attention FFN) fused-layer verify kernel.
-from .moe import moe_layer_fwd
+def __getattr__(name):
+    module = _LAZY_EXPORTS.get(name)
+    if module is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    value = getattr(importlib.import_module(module, __name__), name)
+    globals()[name] = value
+    return value
 
-# LM head (final norm + vocab projection + per-rank greedy argmax), shared by both heads.
-from .lm_head import lm_head_fwd
+
+def __dir__():
+    return sorted(set(globals()) | set(_LAZY_EXPORTS))
+
 
 __all__ = [
     "deltanet_fused_tkg_fwd",

@@ -12,8 +12,11 @@ Large artifacts (logs, reports, logits, profiles, compiled models) live in `~/ru
 | 2026-11-11 | XLA | host, top-k 20 | 14.93 ms | 15.29 ms | 36.25 | n/a (reference) | `~/runs/xla_trn2_229_s768.log` |
 | 2026-11-11 | XLA + library MoE TKG | host, top-k 20 | 10.39 ms | 11.00 ms | 43.35 | no | `~/runs/xlamoe_trn2_229_s768.log` |
 | 2026-11-11 | Megakernel | on-device, top-k 20 | 10.41 ms | 10.77 ms | 88.57 | no | `~/runs/nki_trn2_229_s768.log` |
+| 2026-11-11 | **XLA, greedy (fair)** | on-device greedy, logits out | 14.91 ms | 15.28 ms | 49.67 | reference | `~/runs/xla_greedy_s768.log` |
+| 2026-11-11 | **XLA + library MoE, greedy (fair)** | on-device greedy, logits out | 10.30 ms | 10.98 ms | 63.62 | pending (Task 3) | `~/runs/xlamoe_greedy_s768.log` |
+| 2026-11-11 | **Megakernel, greedy (fair)** | on-device greedy, logits out | 10.12 ms | 10.57 ms | 64.64 | pending (Task 3) | `~/runs/nki_greedy_s768.log` |
 
-Unfair comparison: the megakernel forces on-device sampling, the XLA configs sample on the host from full-vocab logits. Fair greedy rebuilds are Task 1–2 below.
+First three rows are an unfair comparison: the megakernel forces on-device sampling, the XLA configs sample on the host from full-vocab logits. Fair greedy rebuilds are Task 1–2 below.
 
 ## Run-procedure decisions (overnight, unattended)
 
@@ -100,3 +103,36 @@ bash ~/runs/run_job.sh nki_greedy_s768    ~/qwen-30b-a3b/traced_nki_trn2_229_s76
 
 ### E2E overhead with `--output-logits` — Hypothesis
 - XLA greedy E2E 15.6 s vs CTE + 760 × TKG ≈ 11.7 s. The remaining ~4 s/run (was ~9 s with host sampling) is likely the per-step full-vocab logit gather + host copy that `--output-logits` adds. It applies to all three greedy builds equally.
+
+### Build verification — Measured
+| Build | Path | do_sample / top_k | output_logits | Kernel check | NEFF arch errors | Peak RSS | Wall |
+|---|---|---|---|---|---|---|---|
+| XLA | `traced_xla_trn2_229_s768_greedy` | False / 1 | True | n/a | 0 | 74.3 GiB (shards reused) | 23:01 |
+| XLA + library MoE | `traced_xlamoe_trn2_229_s768_greedy` | False / 1 | True | 192× `Running MoE Fused NKI kernel` (48 layers × 4 TKG buckets), 0× `Conditions not met` | 0 | 117.4 GiB | 56:24 |
+| Megakernel | `traced_nki_trn2_229_s768_greedy` | False / 1 | True | `--enable-nki` | 0 | 111.1 GiB | 49:37 |
+
+Logs: `~/runs/{xla,xlamoe,nki}_greedy_s768.log`; reports: `~/runs/{xla,xlamoe,nki}_greedy_s768/benchmark_report.json`.
+
+## 2026-11-11 — Task 2: fair three-way benchmark (seq 768, greedy on-device, logits returned)
+
+Same runs as Task 1 (`evaluate_single` benchmarks after compile+load).
+
+| | XLA | XLA + library MoE | Megakernel |
+|---|---|---|---|
+| TKG p50 | 14.91 ms | 10.30 ms | **10.12 ms** |
+| TKG p99 | 15.28 ms | 10.98 ms | **10.57 ms** |
+| TKG throughput | 67.2 tok/s | 96.6 tok/s | 98.8 tok/s |
+| CTE p50 | 380.0 ms | 382.0 ms | 401.6 ms |
+| E2E p50 | 15,477 ms | 12,058 ms | 11,876 ms |
+| E2E throughput | 49.7 tok/s | 63.6 tok/s | 64.6 tok/s |
+
+| Split | TKG p50 | TKG p99 | E2E p50 |
+|---|---|---|---|
+| Library MoE over XLA | **1.45×** | 1.39× | 1.28× |
+| Megakernel over library MoE | **1.018×** | 1.039× | 1.015× |
+| Megakernel over XLA | 1.47× | 1.45× | 1.30× |
+
+What it shows (Measured): on trn2 the library MoE TKG kernel delivers almost all of the decode gain over XLA; the megakernel adds ~1.8% at p50 (~0.18 ms/step). With sampling and logit return made identical, the earlier 2.44× E2E gap collapses to 1.015× — it was the forced on-device sampling, not fusion.
+Surprising: trn3 README shows megakernel 1.16× over library MoE; trn2 shows 1.02×. Whether 1.8% exceeds run-to-run noise is Task 5.
+Megakernel CTE is 5% slower (401.6 vs 382 ms) even though CTE is XLA in both — Hypothesis: different CTE graph flags from the megakernel model class (`get_compiler_args`), not the kernel.
+Open: E2E still ≈ CTE + 760×TKG + ~3.6 s; Hypothesis: per-step full-vocab logit gather/copy for `--output-logits`.

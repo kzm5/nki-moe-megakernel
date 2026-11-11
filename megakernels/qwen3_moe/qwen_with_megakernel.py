@@ -80,7 +80,6 @@ GQA_SHARDING_STRATEGY = GQA.REPLICATE_TO_TP_DEGREE
 
 import os
 os.environ["NEURON_LOGICAL_NC_CONFIG"] = "2"
-os.environ["NEURON_PLATFORM_TARGET_OVERRIDE"] = "trn3"
 
 # os.environ["NEURON_FRAMEWORK_DEBUG"] = "1"
 # os.environ["XLA_IR_DEBUG"]= "1"

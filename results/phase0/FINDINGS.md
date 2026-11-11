@@ -136,3 +136,64 @@ What it shows (Measured): on trn2 the library MoE TKG kernel delivers almost all
 Surprising: trn3 README shows megakernel 1.16× over library MoE; trn2 shows 1.02×. Whether 1.8% exceeds run-to-run noise is Task 5.
 Megakernel CTE is 5% slower (401.6 vs 382 ms) even though CTE is XLA in both — Hypothesis: different CTE graph flags from the megakernel model class (`get_compiler_args`), not the kernel.
 Open: E2E still ≈ CTE + 760×TKG + ~3.6 s; Hypothesis: per-step full-vocab logit gather/copy for `--output-logits`.
+
+## 2026-11-11 — Task 3: correctness check (logits A/B, never two models in RAM)
+
+```bash
+# Process A (reference): XLA greedy build, 20 fixed prompts (validation_prompts.json) x 128 new tokens
+python ~/runs/val/capture.py ~/qwen-30b-a3b/traced_xla_trn2_229_s768_greedy          # -> ~/runs/val/expected_p{00..19}.pt (fp32, 1.5 GB)
+# Process B: logit_validation (same call as main.py check_accuracy_logits), two tol maps
+python ~/runs/val/validate.py libmoe ~/qwen-30b-a3b/traced_xlamoe_trn2_229_s768_greedy
+python ~/runs/val/validate.py nki    ~/qwen-30b-a3b/traced_nki_trn2_229_s768_greedy
+python ~/runs/val/analyze.py libmoe nki                                               # -> validation_summary.json
+```
+Scripts: [`scripts/`](scripts/). Repo tol_map `{None:(1e-5,0.05), 1000/50/5:(1e-5,0.03)}`; "rtol 1e-2" = same keys with rtol 0.01. `divergence_difference_tol=0.001`. Per-position arrays (max-abs diff, top-1, KL) are in `~/runs/val/results_{libmoe,nki}.json`; first-pass actual logits in `~/runs/val/actual_*.pt`.
+
+Reference sanity: XLA greedy logits' argmax equals the emitted token at 2533/2560 positions; all 27 others are exact bf16 ties.
+
+| vs XLA greedy reference | Library MoE | Megakernel |
+|---|---|---|
+| logit_validation pass, repo tol_map | **0 / 20** | **0 / 20** |
+| logit_validation pass, rtol 1e-2 | **0 / 20** | **0 / 20** |
+| Prompts with no top-1 divergence in 128 tokens | 1 / 20 | 2 / 20 |
+| Median first-divergence index | 31 | 26 |
+| Median pre-divergence mean KL (nats) | 1.8e-3 | 1.9e-3 |
+| Divergences at a near-tie (expected top1−top2 gap ≤ 0.375) | 15 / 19 | 11 / 18 |
+
+Per-prompt first divergence (`first_div`, −1 = none), pre-divergence max-abs logit diff, and expected top-1/top-2 gap at the divergence:
+
+| p | libMoE first_div | libMoE pre max-abs | libMoE gap@div | nki first_div | nki pre max-abs | nki gap@div |
+|---|---|---|---|---|---|---|
+| 0 | 31 | 2.78 | 0.0 | 32 | 2.88 | 0.125 |
+| 1 | 15 | 1.00 | 8.75 | 15 | 1.41 | 8.75 |
+| 2 | 111 | 3.36 | 3.125 | 5 | 0.31 | 2.25 |
+| 3 | 27 | 1.13 | 0.125 | 27 | 1.75 | 0.125 |
+| 4 | −1 | 2.50 | – | −1 | 3.28 | – |
+| 5 | 112 | 6.06 | 8.0 | 2 | 0.36 | 2.625 |
+| 6 | 4 | 0.69 | 0.375 | 4 | 0.69 | 0.375 |
+| 7 | 45 | 5.75 | 5.0 | 45 | 5.84 | 5.0 |
+| 8 | 77 | 1.31 | 0.0 | 5 | 0.53 | 0.5 |
+| 9 | 31 | 0.81 | 0.0 | 2 | 0.41 | 0.0 |
+| 10 | 20 | 0.81 | 0.25 | 21 | 1.09 | 3.125 |
+| 11 | 71 | 3.27 | 0.125 | 102 | 12.37 | 0.25 |
+| 12 | 70 | 1.38 | 0.375 | 70 | 1.53 | 0.375 |
+| 13 | 80 | 4.00 | 0.0 | 14 | 1.84 | 1.375 |
+| 14 | 42 | 1.25 | 0.25 | 42 | 1.00 | 0.25 |
+| 15 | 5 | 0.39 | 0.0 | 5 | 0.47 | 0.0 |
+| 16 | 26 | 1.81 | 0.0 | 26 | 1.31 | 0.0 |
+| 17 | 27 | 3.00 | 0.375 | 26 | 1.56 | 0.125 |
+| 18 | 2 | 0.35 | 0.0 | 12 | 0.70 | 0.0 |
+| 19 | 12 | 1.53 | 0.0 | −1 | 4.75 | – |
+
+What it shows:
+- **Measured:** neither NKI build passes NxDI `logit_validation` against the XLA greedy reference at either tolerance. Validated = false for both (ledger updated).
+- **Measured:** the two NKI builds are statistically alike vs XLA (same pre-divergence KL ~2e-3 nats, similar divergence positions; 9 prompts diverge at the identical index). The megakernel is not measurably worse than the library MoE kernel.
+- **Measured:** even without any token divergence (p04) the failure is logit magnitude, not argmax: per-position error reaches 3.5–7.7% of max |logit| (e.g. token 36: top-k None error 0.077 > 0.05), while KL stays ~7e-4.
+- **Hypothesis:** most divergences are bf16 near-ties (gap ≤ 0.375 ≈ 3 bf16 ulps at |logit|≈20), i.e. numerically benign; the repo tol_map is tighter than bf16 MoE accumulation-order differences allow.
+- **Surprising:** p01@15 (gap 8.75) and p06@4 diverge at the same index and pick the *same* off-ranked token (rank 329 / 833 in the reference) in both NKI builds, which use different MoE kernels. Hypothesis: the XLA reference is the outlier there (e.g. a router top-8 near-tie resolved differently by XLA's torch blockwise path), not an NKI bug.
+- Note: whole-sequence top-1/KL/max-abs in `results_*.json` are free-running after the first divergence and are not meaningful past it; use the pre-divergence columns.
+
+Open questions:
+- Is the XLA reference itself deterministic run-to-run (XLA vs XLA)? That bounds the achievable tolerance.
+- Do p01/p06 trace back to a router near-tie? Compare per-layer router logits at those positions.
+- Teacher-forced comparison (feed reference tokens every step) would give per-position metrics without divergence cascades.

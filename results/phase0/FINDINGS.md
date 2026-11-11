@@ -413,3 +413,21 @@ What it shows:
 - **Measured:** 7/19 (lib MoE) and 9/18 (megakernel) first divergences are not near-ties but single-step gross errors (KL up to 25 nats at a position whose preceding outputs matched golden to ~2e-3), always against golden. Three occur at the same position in both builds (p01@15, p06@4, p07@45) with near-identical values (" United" 25.75 vs 25.38).
 - **Hypothesis:** a shared, input-triggered defect in both NKI paths. They share the NKI MoE TKG kernel family (the megakernel vendors the legacy `moe_tkg`). The NKI top-3 at the spots look like predictions for a different context (country names after "The capital of"; " of" as if " pair" were already present) — wrong expert outputs or stale hidden state, not rounding.
 - **Gate note:** ρ over pre-divergence positions (the Task 2 metric) cannot see these by construction. The Task 5 trigger (ρ > 1.25) is not met as specified; ρ *at the divergence position* is 8–63 for the gross cases.
+
+## 2026-11-11 — Task 3 (day 2): XLA self-consistency
+
+```bash
+bash ~/runs/xla_selfcons.sh   # preshard.py xla (505 s), then capture_to.py xla ... ~/runs/val/xla_self_{A,B} in two separate processes
+python tools/compare_runs.py ~/runs/val/xla_selfcons.json ref=~/runs/val A=~/runs/val/xla_self_A B=~/runs/val/xla_self_B --golden ~/runs/golden
+```
+Same 20 prompts × 128 greedy tokens as Task 3 (day 1). `ref` = day-1 capture (`valA_xla_capture_20261111`).
+
+| Pair | Prompts with identical tokens | Prompts with bit-identical outputs (all 128 × 151,936 values) |
+|---|---|---|
+| ref vs A | 20 / 20 | **20 / 20** |
+| ref vs B | 20 / 20 | **20 / 20** |
+| A vs B | 20 / 20 | **20 / 20** |
+
+What it shows (Measured): the XLA greedy build is bit-deterministic across processes and days (same NEFFs, shards rebuilt by `preshard.py` vs at compile time). Run-to-run nondeterminism contributes nothing to the XLA reference; every NKI-vs-XLA difference is a real numerical difference of the NKI builds. Its error vs fp32 golden (rel-L2 0.0417) is the same in all three runs.
+
+Notes: capture A 9.0 min wall (cold page cache, peak RSS 49 GiB), B 82 s (warm, 64 GiB). Open: is the megakernel equally deterministic? (not tested).

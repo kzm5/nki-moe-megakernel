@@ -221,3 +221,24 @@ Candidate explanations for megakernel ≈ library MoE on trn2 (1.02×) vs 1.16×
 | Lower graph-boundary cost on trn2 | Hypothesis | The megakernel's advantage is removing per-layer HBM round-trips/graph boundaries; if trn2's XLA graph already overlaps those well, there's less to remove. |
 | AllReduce overhead | Hypothesis | Both configs do 2 AllReduces per layer; the megakernel's SB2SB AR-gather may be relatively costlier on trn2's collectives. |
 | Something else | Hypothesis | e.g. the vendored legacy kernels were tuned for trn3 tile shapes (`get_compiler_args` lnc/tiling flags). |
+
+## 2026-11-11 — Task 5: noise floor (5 reruns each, pre-sharded, `--skip-compile`)
+
+```bash
+bash ~/runs/noise.sh   # alternates: libMoE r1, nki r1, libMoE r2, ... (each a fresh process: load + evaluate_single benchmark)
+```
+Each rerun: ~9.5 min wall (pre-sharded load), peak RSS 54–65 GiB. Logs `~/runs/noise_{libmoe,nki}_r{1..5}.log`; stats `~/runs/noise_summary.json`.
+
+| TKG p50 (ms) | r1 | r2 | r3 | r4 | r5 | mean | std | min | max |
+|---|---|---|---|---|---|---|---|---|---|
+| Library MoE | 10.341 | 10.305 | 10.386 | 10.304 | 10.304 | **10.328** | 0.036 | 10.304 | 10.386 |
+| Megakernel | 10.079 | 10.128 | 10.110 | 10.121 | 10.127 | **10.113** | 0.020 | 10.079 | 10.128 |
+
+| | Library MoE | Megakernel |
+|---|---|---|
+| TKG p99 mean ± std | 11.092 ± 0.046 ms | 10.589 ± 0.059 ms |
+| E2E p50 mean ± std | 11,982 ± 59 ms | 11,758 ± 53 ms |
+
+What it shows (Measured): the megakernel is faster than library MoE by **0.215 ms/step (2.1%) at p50**, ~6–10× the run-to-run std (Welch t ≈ 11.6, ranges do not overlap: slowest megakernel 10.128 < fastest library MoE 10.304). At p99 the gap is 0.50 ms (4.5%). The Task 2 single-run numbers (10.30 / 10.12) sit inside these distributions.
+So the trn2 fusion gain is real but small: 1.021× p50, 1.047× p99, vs 1.16× on trn3 (README).
+Open: is the p99 gap (tail) from fewer graph boundaries, i.e. less jitter, rather than a faster steady state? Needs the per-layer profile (Task 4, blocked).

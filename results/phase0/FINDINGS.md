@@ -17,7 +17,7 @@ Unfair comparison: the megakernel forces on-device sampling, the XLA configs sam
 
 ## Run-procedure decisions (overnight, unattended)
 
-- **No fork / no push.** `gh` is not installed and the machine has no GitHub credentials (no SSH key — `git@github.com: Permission denied (publickey)` — no token, no credential helper). Chose: commit locally on `phase0/trn2-setup` after every task; push requires `gh auth login` (or an SSH key) and `gh repo fork KevGomes1403/nki-moe-megakernel --clone=false && git remote add mine <fork-url> && git push mine phase0/trn2-setup`.
+- **Pushing enabled.** At 03:07 UTC `gh` was not on PATH and there were no GitHub credentials, so the seed commit was local only. The user then installed `gh` (logged in as `kzm5`) and created the fork. Remote `mine` = `https://github.com/kzm5/nki-moe-megakernel.git` (git auth via `gh auth setup-git`); `phase0/trn2-setup` is pushed after every task.
 - One device job at a time; free disk checked before every compile.
 
 ---

@@ -3,11 +3,9 @@ name: nki-kernel-optimizer-trn3
 description: |
   Generates, reviews, and optimizes AWS Neuron NKI kernels for Trainium3 (trn3) / NeuronCore-v4.
   Specializes in MXFP8/MXFP4 quantization (nc_matmul_mx, quantize_mx) and NeuronCore-v4 features.
-  DEFAULT skill for all NKI kernel work in this repo (hardware is trn3).
-  Trigger when the user asks to write, fix, optimize, benchmark, or profile any NKI kernel,
-  mentions Trainium/SBUF/PSUM/HBM/nki.lang/nki.isa/neuron-profile, OR mentions trn3,
-  NeuronCore-v4, MXFP8, MXFP4, microscaling, nc_matmul_mx, or quantize_mx.
-  Prefer this over nki-kernel-optimizer unless the user explicitly targets trn2.
+  Trigger ONLY when the user explicitly targets trn3 or mentions NeuronCore-v4, MXFP8, MXFP4,
+  microscaling, nc_matmul_mx, or quantize_mx. This repo's hardware is trn2; use
+  nki-kernel-optimizer for everything else.
 ---
 
 # NKI Kernel Optimizer — Trainium3 (trn3)

@@ -43,7 +43,7 @@ Applies to all code written in this repo. Default Claude verbosity is wrong here
 When asked to "clean up", these are the rules to apply.
 
 ## Hardware Constraints
-- Target hardware is Trainium3 (trn3). 
+- Target hardware is Trainium2 (trn2.3xlarge, NeuronCore-v3).
 - Kernels must work with LNC=2 sharding and respect `shared_hbm` requirements.
 
 ## Multi-Layer Fused TKG Megakernel

@@ -271,3 +271,22 @@ What it shows:
 Open questions:
 - Does the megakernel stay flat at 4096/8192 (attention_tkg switches to flash-attention tiling above 8K per core)?
 - Repeat 256/512 with n=5: the 256 and 512 differences are within ~1–5× noise.
+
+## 2026-11-11 — Stale items in `docs/RESEARCH_PLAN.md` (rev 16 export)
+
+Noted here for the next re-export from the master doc; the snapshot itself is unchanged.
+
+| Plan location | Says | Current state (Measured unless noted) |
+|---|---|---|
+| "Phase 0 results so far (Nov 10)" heading | Nov 10 | Numbers are from the Nov 11 fair rebuild (Tasks 1–6) |
+| Repo finding 1 | `main.py` forces trn3 | Fixed: `9d5ed9a` (`main.py`), `3a22a56` (`qwen_with_megakernel*.py`) |
+| Repo finding 4 | submodule pins `2.30_release` | Pinned to `2.29_release` (`ddbca35`), `22dc8cb`/`36cbdc3` |
+| Repo finding 5 | submodule URL is SSH | HTTPS since `36cbdc3` |
+| Repo finding 7 | trn3 skill is repo default | Flipped 2026-11-11: `nki-kernel-optimizer` (trn2) is default; CLAUDE.md hardware now trn2 |
+| Process findings | "35 ledger lines" | Overnight ledger has 33 lines |
+| Phase 0 item 2 | 10 runs per config | Overnight did 5 each for library MoE and megakernel, none for XLA (10× all three is queued 2026-11-12) |
+| Phase 0 item 3 | audit inherited skills | Not done |
+| Phase 0 exit | within 5% of Spring numbers on same hardware | Not applicable: Spring numbers are trn3, these are trn2 |
+| Risks: SDK drift row | reproduce on 2.27 first | 2.27 never tried; reproduction is on SDK 2.29 (only working combo) |
+| Open question | will Gomes push `72ab554` | Moot for this branch (repinned to `ddbca35`); still breaks a fresh clone of upstream `main` |
+| What-it-took item 1 | `DtypeMode` only from 2.31 | Measured absent in bundled 2.25 nkilib and fork `2.30_release`; presence in 2.31 not tested (Hypothesis) |

@@ -3,6 +3,7 @@
 Computes (per build, per prompt, over positions before the build's first divergence from XLA):
     rel_l2 = ||b - g|| / ||g||, max_abs, KL(g || b), top-1 agreement with golden argmax
     rho    = mean rel_l2(build) / mean rel_l2(XLA) on the same positions (also rho_kl)
+    at_div = the same metrics at the first-divergence position itself (identical context, excluded from rho)
 
 Note:
     Vocab columns that are -inf in any compared tensor (EOS under min_new_tokens) are dropped.
@@ -59,6 +60,12 @@ def main():
             r.update(n_pos=m_, first_div=fd, max_abs=float(mb["max_abs"].max()),
                      rho=float(mb["rel_l2"].mean() / mx["rel_l2"][:m_].mean()),
                      rho_kl=float(mb["kl"].mean() / mx["kl"][:m_].mean()))
+            if 0 <= fd < n:
+                md, mxd = metrics(b[fd:fd + 1], g[fd:fd + 1]), metrics(x[fd:fd + 1], g[fd:fd + 1])
+                gs = g[fd].sort(descending=True).values
+                r["at_div"] = {"rho": float(md["rel_l2"] / mxd["rel_l2"]), "kl": float(md["kl"]), "xla_kl": float(mxd["kl"]),
+                               "golden_agrees": "xla" if mxd["top1"] > md["top1"] else "build",
+                               "golden_gap": float(gs[0] - gs[1])}
             row[k] = r
             for mm in ("rel_l2", "max_abs", "kl", "top1"):
                 acc[k][mm].append(mb[mm])

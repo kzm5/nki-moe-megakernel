@@ -343,3 +343,73 @@ What it shows: on trn2 the megakernel's advantage over library MoE is the contex
 Surprising: megakernel HBM reads and DMA packets are identical across buckets (all its bucket NEFFs are the same size, 5.17/5.22 MB): its attention reads the full `seq_len` KV every step, which is still cheap (≈1 MB/layer at 2048).
 
 Open: identify the growing XLA ops (source tags missing); n=1 step per bucket (no variance); whether Gomes's trn3 numbers used the same per-layer convention.
+
+## 2026-11-11 — Task 2 (day 2): fp32 golden reference
+
+```bash
+python tools/golden_fp32.py --check-hf "The capital of France is"                       # bf16 layerwise vs stock HF
+python tools/golden_fp32.py --dtype fp32 --inputs "$HOME/runs/val/expected_p00.pt" --out ~/runs/golden_timing   # timing
+python tools/golden_fp32.py --dtype fp32 --inputs "$HOME/runs/val/expected_p*.pt" --out ~/runs/golden            # 20 prompts
+python tools/compare_golden.py                                                           # -> ~/runs/golden/compare.json
+```
+`tools/golden_fp32.py`: stock HF `Qwen3MoeDecoderLayer` (transformers 4.57.6, sdpa), one layer resident; each layer's weights are read once and all 20 prompts' hidden states pass through it before it is freed. Teacher-forced: one forward per prompt over prompt + XLA's 128 greedy tokens; saves the 128 logit rows that predict each generated token, plus per-layer router top-9 (`~/runs/golden/golden_pNN.pt`, 1.5 GB).
+
+### Script validation — Measured
+| Check | Result |
+|---|---|
+| bf16 layerwise vs stock HF `Qwen3MoeForCausalLM` (bf16), "The capital of France is" (5 tokens) | **bit-identical** logits (max-abs 0.0) |
+| fp32, 1 prompt (134 tokens) | 62.3 s wall, 4.3 GiB peak RSS |
+| fp32, 20 prompts (2,764 tokens) | 92 s compute, 106 s wall, **4.4 GiB peak RSS** |
+
+### Builds vs golden, positions before each build's first divergence — Measured
+| vs fp32 golden | XLA | Library MoE | Megakernel |
+|---|---|---|---|
+| Positions | 2,560 (all) | 936 | 711 |
+| rel-L2 mean / median | 0.0417 / 0.0281 | 0.0418 / 0.0276 | 0.0460 / 0.0282 |
+| max-abs (max / mean) | 10.81 / 0.70 | 10.07 / 0.67 | 12.08 / 0.78 |
+| KL(golden‖build) mean | 1.89e-3 | 2.24e-3 | 2.24e-3 |
+| top-1 agreement with golden | 98.6% | 98.9% | 99.0% |
+| **ρ = err(build)/err(XLA), same positions** | 1 | **0.957** | **1.054** |
+| ρ_KL | 1 | 1.06 | 1.22 |
+
+Both NKI builds are within the ρ ≤ 1.25 strawman gate on these positions: before divergence they are as accurate as XLA against fp32.
+
+### The divergence positions themselves — Measured
+At a build's first divergence the context is still identical to XLA's, so those logits are comparable too (they are excluded from ρ above). Two classes separate cleanly:
+
+| | Library MoE (19 divergences) | Megakernel (18) |
+|---|---|---|
+| Benign (KL(golden‖build) ≤ 0.02, golden top1−top2 ≤ 0.5) | 12 — golden picks the build's token in 7 | 9 — golden picks the build's token in 6 |
+| **Gross (KL 0.9–25 nats, ρ at div 8–63)** | **7 — golden picks XLA's token in all 7** | **9 — golden picks XLA's token in all 9** |
+
+Gross divergences (KL(golden‖XLA) at the same positions ≤ 0.01):
+| Build | Prompt@pos | ρ at div | KL(golden‖build) | KL(golden‖XLA) | Golden top1−top2 |
+|---|---|---|---|---|---|
+| lib MoE | p03@27 | 36.8 | 24.78 | 0.0022 | 0.003 |
+| lib MoE | p06@4 | 32.4 | 20.56 | 0.0093 | 0.157 |
+| megakernel | p06@4 | 32.7 | 20.36 | 0.0093 | 0.157 |
+| megakernel | p13@14 | 58.4 | 17.93 | 0.0034 | 1.178 |
+| megakernel | p02@5 | 63.0 | 16.45 | 0.0002 | 2.197 |
+| lib MoE | p02@111 | 40.8 | 15.78 | 0.0002 | 3.024 |
+| lib MoE | p01@15 | 26.4 | 14.96 | 0.0000 | 8.625 |
+| megakernel | p01@15 | 26.0 | 14.62 | 0.0000 | 8.625 |
+| lib MoE | p05@112 | 28.8 | 14.04 | 0.0001 | 7.521 |
+| megakernel | p05@2 | 33.1 | 9.16 | 0.0001 | 2.671 |
+| megakernel | p08@5 | 11.8 | 7.40 | 0.0021 | 0.455 |
+| lib MoE | p17@27 | 7.9 | 3.24 | 0.0014 | 0.471 |
+| megakernel | p00@32 | 28.0 | 2.62 | 0.0012 | 0.140 |
+| megakernel | p10@21 | 40.4 | 1.21 | 0.0000 | 3.146 |
+| lib MoE | p07@45 | 13.4 | 1.02 | 0.0000 | 4.980 |
+| megakernel | p07@45 | 13.2 | 0.88 | 0.0000 | 4.980 |
+
+The two "same unlikely token" spots — **golden sides with XLA; the XLA-outlier hypothesis is refuted (Measured):**
+| Spot | Context (tail) | Golden top-1 | XLA token | Both NKI builds' token (golden rank, value) | NKI top-3 |
+|---|---|---|---|---|---|
+| p01@15 | "…capital of the United Kingdom is London. The capital of Spain" | " is" (33.6) | " is" | " United" (rank 298, 13.7) | " United" 25.8 / " Netherlands" 23.3 / " USA" 23.1 |
+| p06@4 | "…I want to go for a walk. I have a new" | " pair" (23.0) | " pair" | " of" (rank 880, 11.9) | " of" 31.3 / " to" 28.0 / " on" 22.1 |
+
+What it shows:
+- **Measured:** the benign divergences are bf16 near-ties, and there golden is split between XLA and the NKI build — neither is "right" at a near-tie.
+- **Measured:** 7/19 (lib MoE) and 9/18 (megakernel) first divergences are not near-ties but single-step gross errors (KL up to 25 nats at a position whose preceding outputs matched golden to ~2e-3), always against golden. Three occur at the same position in both builds (p01@15, p06@4, p07@45) with near-identical values (" United" 25.75 vs 25.38).
+- **Hypothesis:** a shared, input-triggered defect in both NKI paths. They share the NKI MoE TKG kernel family (the megakernel vendors the legacy `moe_tkg`). The NKI top-3 at the spots look like predictions for a different context (country names after "The capital of"; " of" as if " pair" were already present) — wrong expert outputs or stale hidden state, not rounding.
+- **Gate note:** ρ over pre-divergence positions (the Task 2 metric) cannot see these by construction. The Task 5 trigger (ρ > 1.25) is not met as specified; ρ *at the divergence position* is 8–63 for the gross cases.

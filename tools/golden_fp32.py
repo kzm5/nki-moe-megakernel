@@ -144,7 +144,7 @@ def main():
     logits = lm_head(W, dt, hs, rows)
     for n, s, lg, tp in zip(names, seqs, logits, tops):
         torch.save({"dtype": a.dtype, "input_ids": s, "logits": lg,
-                    "router_top": torch.stack([v[0] for v, _ in tp]), "router_ids": torch.stack([i[0] for _, i in tp])},
+                    "router_top": torch.stack([v for v, _ in tp]), "router_ids": torch.stack([i for _, i in tp])},
                    os.path.join(a.out, n))
     print(f"GOLDEN_DONE n={len(seqs)} tokens={sum(s.shape[1] for s in seqs)} {time.time() - t0:.1f}s", flush=True)
 

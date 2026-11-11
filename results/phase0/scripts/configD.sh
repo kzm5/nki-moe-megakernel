@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Config D: library MoE + NxDI NKI attention-block TKG kernel. 1 compile+bench and 2 reruns per seq_len.
 D=(--moe-fused-nki-kernel-enabled --attn-block-tkg-nki-kernel-enabled --attn-block-tkg-nki-kernel-cascaded-attention
-   --qkv-kernel-enabled --on-device-sampling --top-k 1 --do-sample '' --output-logits)
+   --qkv-kernel-enabled --fused-qkv --on-device-sampling --top-k 1 --do-sample '' --output-logits)
 for s in ${SEQS:-768 2048}; do
   cdir=~/qwen-30b-a3b/traced_cfgD_trn2_229_s${s}_greedy
   echo "$(date -u +%FT%TZ) START cfgD_s${s}_r1 disk=$(df -h --output=avail / | tail -1)" >> ~/runs/cfgD_status.log

@@ -431,3 +431,45 @@ Same 20 prompts × 128 greedy tokens as Task 3 (day 1). `ref` = day-1 capture (`
 What it shows (Measured): the XLA greedy build is bit-deterministic across processes and days (same NEFFs, shards rebuilt by `preshard.py` vs at compile time). Run-to-run nondeterminism contributes nothing to the XLA reference; every NKI-vs-XLA difference is a real numerical difference of the NKI builds. Its error vs fp32 golden (rel-L2 0.0417) is the same in all three runs.
 
 Notes: capture A 9.0 min wall (cold page cache, peak RSS 49 GiB), B 82 s (warm, 64 GiB). Open: is the megakernel equally deterministic? (not tested).
+
+## 2026-11-11 — Task 4 (day 2): separate attention from fusion (config D)
+
+NxDI 0.x in `~/venv-neuron-229` has its own NKI attention token-generation kernel that runs alongside `--moe-fused-nki-kernel-enabled`: `attn_block_tkg_nki_kernel_enabled` (`modules/attention/attention_base.py:1753`), which supports Qwen3's pre-RoPE Q/K RMSNorm. `megakernels/qwen3_moe/qwen.py:538` requires `--attn-block-tkg-nki-kernel-cascaded-attention` with it, and the NxDI GQA path requires `--fused-qkv` with `--qkv-kernel-enabled` (attempt 1 failed in 7 s: `AssertionError: QKV kernel only supported when fused_qkv is TRUE`, `gqa.py:497`).
+
+```bash
+bash ~/runs/configD.sh   # per seq_len: run_job.sh (compile+bench) then 2 x --skip-compile reruns
+# D flags: --moe-fused-nki-kernel-enabled --attn-block-tkg-nki-kernel-enabled --attn-block-tkg-nki-kernel-cascaded-attention
+#          --qkv-kernel-enabled --fused-qkv --on-device-sampling --top-k 1 --do-sample "" --output-logits --seq-len {768,2048}
+```
+Verified in the logs: `[attn-block-tkg]` SBUF-manager lines (17 at 768, 22 at 2048) and 191× `Running MoE Fused NKI kernel`; saved `neuron_config` has all four flags. Compile 824 s (768) / 1,161 s (2048); reruns 12.7–39 min wall (weights shard on load, peak RSS 121 GiB, I/O-bound).
+
+### Four configs, TKG p50 (ms) — Measured
+| Config | seq 768 | seq 2048 | Δ 768→2048 |
+|---|---|---|---|
+| A. XLA | 14.91 (n=1) | – | – |
+| B. XLA + lib MoE | 10.328 ± 0.036 (n=5) | 10.839 (n=1) | +0.511 |
+| **D. XLA + lib MoE + NxDI NKI attention** | **12.076 ± 0.044 (n=3)** | **12.081 ± 0.101 (n=3)** | **+0.005** |
+| C. Megakernel | 10.113 ± 0.020 (n=5) | 10.233 (n=1) | +0.120 |
+
+p99: D 12.46–12.63 (768), 12.47–12.75 (2048). E2E p50: D 19.0–19.3 s (768) vs B 12.0 s and C 11.8 s.
+D runs: 12.113 / 12.087 / 12.027 (768); 12.197 / 12.029 / 12.016 (2048).
+
+### Split of the megakernel's gain over lib MoE
+| Component | 768 | 2048 | Basis |
+|---|---|---|---|
+| Total gain B→C | 0.215 ms | 0.606 ms | measured |
+| Context-dependent part (B's slope − C's slope, from 768) | – | 0.391 ms | measured slopes |
+| NKI attention removes the context slope? | – | yes: D and C both ≈ flat (+0.005, +0.12) vs B +0.51 | measured |
+| Adding NxDI's NKI attention to B (B→D) | **+1.75 ms (slower)** | **+1.24 ms (slower)** | measured |
+| C vs D ("fusion + Gomes's attention" vs NxDI attention) | −1.96 ms | −1.85 ms | measured |
+
+What it shows:
+- **Measured:** NKI attention on its own eliminates the context-length growth of decode latency (D is flat from 768 to 2048, like the megakernel; lib MoE's XLA attention grows 0.51 ms). This confirms Task 1's profile: the megakernel's context-dependent advantage is an attention-kernel effect.
+- **Measured:** NxDI's attention-block TKG kernel is **1.17× slower than XLA attention at 768** on trn2 (+1.75 ms/step ≈ +36 µs/layer), and still slower at 2048. So the four-config design cannot cleanly split "attention kernel" from "fusion": the only available NKI attention stand-in is not neutral. The megakernel beats D by ~1.9 ms at both lengths; that combines Gomes's attention kernel (vs NxDI's) and fusion, and Task 1 found no fusion (sync/DMA) saving.
+- **Hypothesis:** D's fixed cost comes from the cascaded-attention kernel and/or the fused-QKV kernel path not being tuned for trn2 (NxDI's Qwen3-MoE recipe for this kernel targets trn3 with `--internal-max-instruction-limit=15000000`, `qwen.py:545`).
+- **Surprising:** D's E2E is ~7 s/run longer than B's although TKG accounts for only ~1.3 s of it (760 × 1.75 ms). Hypothesis: extra host-side work per step in this path. Not investigated.
+
+Open: profile D (one capture, ~25 min) to locate the +36 µs/layer; compare D's attention kernel against the megakernel's attention subkernel in isolation.
+
+### Golden reference reproducibility — Measured
+Re-ran `golden_fp32.py` (fixing the router top-9 capture, which saved position 0 only in the first run; output values were unaffected): v1 vs v2 max-abs 3.5e-3, per-position rel-L2 ≤ 3.1e-4, 0/2,560 argmax flips. CPU fp32 is not bit-reproducible across thread schedules (952% vs 452% CPU), but the drift is ~1% of the builds' error vs golden (0.04). Router data: `~/runs/golden_v2/` (`router_top`/`router_ids` `[48, T, 9]`); comparisons above use v1.

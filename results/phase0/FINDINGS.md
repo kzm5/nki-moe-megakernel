@@ -13,8 +13,8 @@ Large artifacts (logs, reports, logits, profiles, compiled models) live in `~/ru
 | 2026-11-11 | XLA + library MoE TKG | host, top-k 20 | 10.39 ms | 11.00 ms | 43.35 | no | `~/runs/xlamoe_trn2_229_s768.log` |
 | 2026-11-11 | Megakernel | on-device, top-k 20 | 10.41 ms | 10.77 ms | 88.57 | no | `~/runs/nki_trn2_229_s768.log` |
 | 2026-11-11 | **XLA, greedy (fair)** | on-device greedy, logits out | 14.91 ms | 15.28 ms | 49.67 | reference | `~/runs/xla_greedy_s768.log` |
-| 2026-11-11 | **XLA + library MoE, greedy (fair)** | on-device greedy, logits out | 10.30 ms | 10.98 ms | 63.62 | pending (Task 3) | `~/runs/xlamoe_greedy_s768.log` |
-| 2026-11-11 | **Megakernel, greedy (fair)** | on-device greedy, logits out | 10.12 ms | 10.57 ms | 64.64 | pending (Task 3) | `~/runs/nki_greedy_s768.log` |
+| 2026-11-11 | **XLA + library MoE, greedy (fair)** | on-device greedy, logits out | 10.30 ms | 10.98 ms | 63.62 | **no** (0/20 logit_validation) | `~/runs/xlamoe_greedy_s768.log` |
+| 2026-11-11 | **Megakernel, greedy (fair)** | on-device greedy, logits out | 10.12 ms | 10.57 ms | 64.64 | **no** (0/20 logit_validation) | `~/runs/nki_greedy_s768.log` |
 
 First three rows are an unfair comparison: the megakernel forces on-device sampling, the XLA configs sample on the host from full-vocab logits. Fair greedy rebuilds are Task 1–2 below.
 
@@ -197,3 +197,27 @@ Open questions:
 - Is the XLA reference itself deterministic run-to-run (XLA vs XLA)? That bounds the achievable tolerance.
 - Do p01/p06 trace back to a router near-tie? Compare per-layer router logits at those positions.
 - Teacher-forced comparison (feed reference tokens every step) would give per-position metrics without divergence cascades.
+
+## 2026-11-11 — Task 4: per-layer profile, library MoE vs megakernel — FAILED (blocked)
+
+```bash
+python ~/runs/prof/profile_tkg.py libmoe ~/qwen-30b-a3b/traced_xlamoe_trn2_229_s768_greedy ~/runs/prof/libmoe
+# sets NEURON_RT_INSPECT_ENABLE=1 NEURON_RT_INSPECT_DEVICE_PROFILE=1 NEURON_RT_INSPECT_OUTPUT_DIR=..., then prefill + 4 greedy decode steps
+```
+
+| Attempt | Result |
+|---|---|
+| 1. runtime inspect capture (library MoE) | Captured 9 NEFFs × 4 ranks; 4 sets of 1.8–2.4 GB NTFFs (non-decode graphs) filled the disk → `NRT:nrt_profile_serialize Failed to serialize a profile`, exit 1 |
+| 2. read the NTFFs (`neuron-profile show-session`, `neuron-explorer view`) | `NTFF version 7 is not supported in this version of the tool (supported: 1 - 6). Please upgrade aws-neuronx-tools.` |
+
+- **Measured:** runtime 2.32.31 (installed for SDK 2.30) writes NTFF v7; installed `aws-neuronx-tools` is 2.28.23 (supports v1–6). Upgrading tools is an apt change, out of scope tonight. Megakernel capture skipped (same blocker, same disk risk).
+- Kept: small NTFFs + all NEFFs in `~/runs/prof/libmoe/` (321 MB) for re-analysis after a tools upgrade; deleted the 4 large sets (logged in `~/runs/deletions.log`).
+- Unblock: `sudo apt-get install aws-neuronx-tools=2.30.10.0*` (SDK 2.30 tools) — then rerun with `NEURON_RT_INSPECT_*` restricted to the TKG NEFF (or `neuron-profile capture -n <tkg.neff>` with `--collectives-workers-per-node 4`) to avoid profiling the multi-GB CTE/weight-layout graphs.
+
+Candidate explanations for megakernel ≈ library MoE on trn2 (1.02×) vs 1.16× on trn3 — **all Hypothesis, none measured**:
+| Candidate | Status | Reasoning |
+|---|---|---|
+| SBUF spill / lost double-buffering on trn2's smaller SBUF | Hypothesis (plausible) | The speculative megakernel sizes its allocator at `SBM_SIZE_BYTES = 200 KiB` per partition and double-buffers per-layer weights (`interleave_degree=2`); trn2 SBUF is 192 KiB/partition vs 256 KiB+ on trn3 (unverified spec), so prefetch may serialize. Needs `spill_reload_bytes` and DMA/compute overlap from the profile. |
+| Lower graph-boundary cost on trn2 | Hypothesis | The megakernel's advantage is removing per-layer HBM round-trips/graph boundaries; if trn2's XLA graph already overlaps those well, there's less to remove. |
+| AllReduce overhead | Hypothesis | Both configs do 2 AllReduces per layer; the megakernel's SB2SB AR-gather may be relatively costlier on trn2's collectives. |
+| Something else | Hypothesis | e.g. the vendored legacy kernels were tuned for trn3 tile shapes (`get_compiler_args` lnc/tiling flags). |

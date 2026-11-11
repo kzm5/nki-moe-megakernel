@@ -1,3 +1,14 @@
+## Session rules
+
+- At session start, read in order: `docs/RESEARCH_PLAN.md` (snapshot; master copy is the user's Claude doc, don't edit it here), `results/phase0/SUMMARY_2026-11-11.md`, `results/phase0/FINDINGS.md`, `results/phase0/ledger.jsonl`.
+- Use `~/venv-neuron-229` (SDK 2.29) with nkilib fork branch `2.29_release`.
+- Run only one compile or device job at a time. Host RAM peaks around 121 GiB of 124; there is a 64 GB swapfile.
+- `--seq-len` must be a multiple of 256 at LNC=2.
+- Record every run, including failures, in the ledger (`~/runs/ledger.jsonl`, copied to `results/phase0/ledger.jsonl`) and in `FINDINGS.md`. Label every claim Measured or Hypothesis.
+- Commit and push to remote `mine` after each task.
+- Don't edit kernel files without the user's approval.
+- The Capacity Block ends 2026-11-13 06:30 ET and terminates the instance. Everything must be pushed before then.
+
 ## NKI Kernel Development
 
 When fixing NKI kernels, never remove existing optimizations (e.g., SBUF hoisting, DMA optimizations) unless explicitly asked. Fixes must preserve performance characteristics.

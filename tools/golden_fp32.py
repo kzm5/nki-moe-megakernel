@@ -1,0 +1,153 @@
+"""Layer-by-layer CPU reference forward for Qwen3-30B-A3B (teacher-forced, no KV cache).
+
+Computes:
+    logits = lm_head(norm(L47(...L0(embed(ids)))))
+    using the stock HF Qwen3MoeDecoderLayer, one layer resident at a time.
+
+Tiled computation:
+    For each layer: load its weights from the safetensors shards, cast to --dtype, run every
+    sequence through it, free it. Peak RAM is about one fp32 layer (~2.5 GB) plus embed/lm_head.
+
+Returns (per input, --out/<name>.pt):
+    logits      [n_rows, V] fp32, rows = positions plen-1 .. plen+n_new-2 (the logits that
+                predict each generated token), or all positions with --all-positions
+    router_top  [L, T, 9] fp32 top-9 router logits; router_ids [L, T, 9] int16
+
+Note:
+    --check-hf loads the stock HF model in bf16 (~61 GB RAM) and asserts the layerwise bf16
+    logits match it on one prompt; run it only while nothing else is using host RAM.
+"""
+import argparse, gc, glob, json, os, time
+import torch
+from safetensors import safe_open
+from transformers import AutoConfig
+from transformers.masking_utils import create_causal_mask
+from transformers.models.qwen3_moe.modeling_qwen3_moe import (
+    Qwen3MoeDecoderLayer, Qwen3MoeRMSNorm, Qwen3MoeRotaryEmbedding)
+
+DTYPES = {"fp32": torch.float32, "bf16": torch.bfloat16, "fp64": torch.float64}
+
+
+class Weights:
+    def __init__(self, path):
+        self.path = path
+        self.map = json.load(open(os.path.join(path, "model.safetensors.index.json")))["weight_map"]
+
+    def load(self, prefix, dtype):
+        by_file = {}
+        for k, f in self.map.items():
+            if k.startswith(prefix):
+                by_file.setdefault(f, []).append(k)
+        out = {}
+        for f, keys in by_file.items():
+            with safe_open(os.path.join(self.path, f), framework="pt") as h:
+                for k in keys:
+                    out[k[len(prefix):]] = h.get_tensor(k).to(dtype)
+        return out
+
+
+def build(cls, sd, *args):
+    with torch.device("meta"):
+        m = cls(*args)
+    m.load_state_dict(sd, assign=True, strict=True)
+    return m.eval()
+
+
+@torch.inference_mode()
+def forward_layerwise(model_path, seqs, dtype, attn_impl="sdpa", log=print):
+    """seqs: list of [1, T] int64. Returns final-norm hidden states and router tops per sequence."""
+    cfg = AutoConfig.from_pretrained(model_path)
+    cfg._attn_implementation = attn_impl
+    W = Weights(model_path)
+    emb = W.load("model.embed_tokens.", dtype)["weight"]
+    hs = [emb[s[0]].unsqueeze(0) for s in seqs]
+    del emb
+    rope = Qwen3MoeRotaryEmbedding(cfg)
+    ctx = []
+    for h in hs:
+        T = h.shape[1]
+        pos = torch.arange(T).unsqueeze(0)
+        mask = create_causal_mask(config=cfg, input_embeds=h, attention_mask=None,
+                                  cache_position=torch.arange(T), past_key_values=None, position_ids=pos)
+        ctx.append((pos, mask, rope(h, pos)))
+    tops = [[] for _ in seqs]
+    for li in range(cfg.num_hidden_layers):
+        t0 = time.time()
+        layer = build(Qwen3MoeDecoderLayer, W.load(f"model.layers.{li}.", dtype), cfg, li)
+        rec = {}
+        hook = layer.mlp.gate.register_forward_hook(lambda m, i, o: rec.__setitem__("r", o))
+        for j, h in enumerate(hs):
+            pos, mask, pe = ctx[j]
+            hs[j] = layer(h, position_embeddings=pe, attention_mask=mask, position_ids=pos)
+            v, ix = rec["r"].float().topk(9, dim=-1)
+            tops[j].append((v, ix.to(torch.int16)))
+        hook.remove()
+        del layer, rec
+        gc.collect()
+        log(f"layer {li:2d} {time.time() - t0:6.1f}s")
+    norm = build(Qwen3MoeRMSNorm, W.load("model.norm.", dtype), cfg.hidden_size, cfg.rms_norm_eps)
+    hs = [norm(h) for h in hs]
+    return hs, tops, W
+
+
+@torch.inference_mode()
+def lm_head(W, dtype, hs, rows):
+    w = W.load("lm_head.", dtype)["weight"]
+    return [(h[0, r] @ w.T).float() for h, r in zip(hs, rows)]
+
+
+def check_hf(model_path, prompt):
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+    tok = AutoTokenizer.from_pretrained(model_path)
+    ids = tok([prompt], return_tensors="pt").input_ids
+    hs, _, W = forward_layerwise(model_path, [ids], torch.bfloat16)
+    ours = lm_head(W, torch.bfloat16, hs, [slice(None)])[0]
+    del hs
+    gc.collect()
+    m = AutoModelForCausalLM.from_pretrained(model_path, dtype=torch.bfloat16).eval()
+    with torch.inference_mode():
+        ref = m(ids).logits[0].float()
+    d = (ours - ref).abs()
+    res = {"prompt": prompt, "T": ids.shape[1], "max_abs": float(d.max()), "bit_identical": bool(torch.equal(ours, ref)),
+           "top1_agree": float((ours.argmax(-1) == ref.argmax(-1)).float().mean()),
+           "rel_l2": float((ours - ref).norm() / ref.norm())}
+    print("CHECK_HF", json.dumps(res), flush=True)
+    return res
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--model-path", default=os.path.expanduser("~/qwen-30b-a3b/hf_model"))
+    ap.add_argument("--dtype", choices=DTYPES, default="fp32")
+    ap.add_argument("--inputs", nargs="*", default=[], help="expected_pNN.pt files (input_ids + sequences)")
+    ap.add_argument("--n-new", type=int, default=128)
+    ap.add_argument("--out", default=os.path.expanduser("~/runs/golden"))
+    ap.add_argument("--all-positions", action="store_true")
+    ap.add_argument("--threads", type=int, default=os.cpu_count())
+    ap.add_argument("--check-hf", metavar="PROMPT")
+    a = ap.parse_args()
+    torch.set_num_threads(a.threads)
+    if a.check_hf:
+        check_hf(a.model_path, a.check_hf)
+        return
+    os.makedirs(a.out, exist_ok=True)
+    seqs, rows, names = [], [], []
+    for p in sorted(sum((glob.glob(x) for x in a.inputs), [])):
+        e = torch.load(p)
+        plen = e["input_ids"].shape[1]
+        seqs.append(e["sequences"][:, : plen + a.n_new - 1])
+        rows.append(slice(None) if a.all_positions else slice(plen - 1, plen + a.n_new - 1))
+        names.append(os.path.basename(p).replace("expected_", "golden_"))
+    t0 = time.time()
+    dt = DTYPES[a.dtype]
+    hs, tops, W = forward_layerwise(a.model_path, seqs, dt, log=lambda s: print(s, flush=True))
+    logits = lm_head(W, dt, hs, rows)
+    for n, s, lg, tp in zip(names, seqs, logits, tops):
+        torch.save({"dtype": a.dtype, "input_ids": s, "logits": lg,
+                    "router_top": torch.stack([v[0] for v, _ in tp]), "router_ids": torch.stack([i[0] for _, i in tp])},
+                   os.path.join(a.out, n))
+    print(f"GOLDEN_DONE n={len(seqs)} tokens={sum(s.shape[1] for s in seqs)} {time.time() - t0:.1f}s", flush=True)
+
+
+if __name__ == "__main__":
+    main()

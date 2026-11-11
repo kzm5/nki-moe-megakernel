@@ -290,3 +290,56 @@ Noted here for the next re-export from the master doc; the snapshot itself is un
 | Risks: SDK drift row | reproduce on 2.27 first | 2.27 never tried; reproduction is on SDK 2.29 (only working combo) |
 | Open question | will Gomes push `72ab554` | Moot for this branch (repinned to `ddbca35`); still breaks a fresh clone of upstream `main` |
 | What-it-took item 1 | `DtypeMode` only from 2.31 | Measured absent in bundled 2.25 nkilib and fork `2.30_release`; presence in 2.31 not tested (Hypothesis) |
+
+## 2026-11-11 — Task 1 (day 2): per-layer decode profile, library MoE vs megakernel, seq 768 and 2048
+
+```bash
+sudo apt-mark unhold aws-neuronx-tools && sudo apt-get install aws-neuronx-tools=2.30.10.0* && sudo apt-mark hold aws-neuronx-tools
+bash ~/runs/prof/run_prof.sh prof_{libmoe,nki}_s{768,2048} {libmoe,nki} <build> {768,2048}   # profile_decode.py
+python ~/runs/prof/neffdump.py <build>/model.pt <out>/neffs                                     # TKG bucket NEFFs
+python tools/profile_table.py OUT.json LABEL=NEFF:NTFF_GLOB ...                                 # summary-json -> per layer
+python tools/profile_breakdown.py PROF.json ...                                                 # per-instruction json
+```
+Builds: `traced_xlamoe_trn2_229_s768_greedy`, `traced_nki_trn2_229_s768_greedy`, `traced_{libmoe,nki}_trn2_229_s2048_greedy_sweep` (weights shard on load).
+Scripts: [`scripts/`](scripts/); tables `~/runs/prof/tables/*.json` (copied to [`profile/`](profile/)).
+
+### Capture method — Measured
+| Attempt | Result |
+|---|---|
+| 1. `torch.classes.neuron.Runtime().profile_enable` around one TKG call | No files: NxDI's SPMD execution path isn't covered |
+| 2. ctypes `nrt_inspect_begin/stop` with `NEURON_RT_INSPECT_DEVICE_PROFILE=session` | 4 × 123 MB NTFF readable by tools 2.30, but no NEFF → no `view` |
+| 3. Same, mode `model`, two windows per process: TKG call 6 (bucket 128) and the call at position `seq_len−4` (largest bucket) | Works: ~1 GB per capture (8 NTFF), NEFFs from `SPMDModel.save_neff` (`neffdump.py`); mismatched NEFF/NTFF is rejected by `view` |
+- Env vars set in-process after load and before `nrt_inspect_begin()` keep CTE out of the capture (yesterday's whole-process inspect wrote 1.8–2.4 GB per NEFF and filled the disk).
+- **Rank skew (Measured):** the four ranks enter a profiled step staggered; the early ones idle inside collectives (graph time per rank e.g. 21.9 / 9.3 / 65.7 / 88.9 ms, CC 13.6 / 0.9 / 57.4 / 80.6 ms) while engine and DMA times are identical across ranks. Tables use the least-skewed rank (minimum `total_time`, 9.2–9.9 ms, vs measured TKG p50 10.1–10.8 ms incl. host overhead).
+- Per-layer = whole TKG graph / 48 (includes embedding, LM head, sampling — same convention assumed for Gomes's Table 5). n = 1 step per bucket.
+
+### Table 5 on trn2 vs Gomes's trn3 (µs per layer unless noted)
+| Metric | trn3 lib MoE (Gomes, 640 tok) | trn3 megakernel | trn2 lib MoE, s768 b768 | trn2 megakernel, s768 b768 | trn2 lib MoE, s2048 b2048 | trn2 megakernel, s2048 b2048 |
+|---|---|---|---|---|---|---|
+| Wall time / layer | 165.26 | 134.47 | 203.6 | **192.8** | 205.4 | **193.0** |
+| Sync engine | 53.52 | 19.05 | 60.1 | 58.5 | 59.1 | 58.4 |
+| DMA active | 91.99 | 66.50 | 128.3 | 123.5 | 128.5 | 125.7 |
+| Tensor engine | 48.86 | 48.15 | 62.8 | 58.4 | 63.9 | 59.3 |
+| CC ops (AllReduce) | 13.45 | 27.77 | 20.0 | 28.8 | 19.6 | 28.8 |
+| DMA packets / layer | – | −43% vs lib MoE | 42,740 | 43,748 (+2%) | 43,135 | 43,865 (+2%) |
+| Avg DMA packet bytes | – | 2.7× lib MoE | 787 | 783 (1.0×) | 795 | 796 (1.0×) |
+| Scalar / Vector / GpSimd | – | – | 55.0 / 47.6 / 64.1 | 29.8 / 49.3 / 56.4 | 55.0 / 49.5 / 64.7 | 30.1 / 49.4 / 56.6 |
+| HBM read MB / layer | – | – | 33.4 | 33.6 | 34.0 | 34.3 |
+| Spill reload / save (bytes per graph) | – | – | 212,864 / 122,888 | 19,328 / 36,872 | 212,864 / 122,888 | 24,448 / 36,872 |
+| Graph time (ms) | – | – | 9.77 | 9.26 | 9.86 | 9.27 |
+
+Smallest bucket (128) for comparison: lib MoE 193.5 (s768) / 193.6 (s2048) µs/layer; megakernel 192.5 / 192.9.
+
+### Where the trn2 gain comes from
+| Explanation | Verdict | Evidence |
+|---|---|---|
+| Attention scaling with context | **Supported (Measured; op identity Hypothesis)** | Lib MoE wall grows +10.1 µs/layer (128→768) and +11.8 (128→2048); megakernel +0.3 / +0.1. At bucket 128 the two are equal (193.5 vs 192.5). Graph-time gap at the largest bucket (0.51 ms at 768, 0.59 ms at 2048) matches the benchmark gap at 2048 (0.61 ms). Per-instruction breakdown (lib MoE s2048): NKI MoE kernel and `attention_base.py`-tagged ops don't grow; the growth (TensorMatrix +13.3, Vector +7.4, GpSimd +7.3, Tensor +6.7 µs/layer summed duration) is in untagged XLA ops whose extra HBM read (+0.93 MB/layer) equals the extra K+V bytes (≈0.98 MB/layer/rank). Hypothesis: those are XLA's QK/softmax/PV over the bucket length. |
+| SBUF spill / lost double-buffering | **Not supported (Measured)** | Megakernel spill reload 19–24 KB per graph (lib MoE 213 KB); its DMA-active and tensor time are slightly below lib MoE, not above. |
+| Graph-boundary cost | **Not supported on trn2 (Measured)** | Sync engine 58.5 vs 60.1 µs/layer (trn3: 19.1 vs 53.5); DMA packets +2% and same average size (trn3: −43%, 2.7× larger). The trn3 boundary savings don't appear here. Why: Hypothesis (trn2 lib-MoE graph already has few boundaries? megakernel's trn3-tuned DMA tiling?). |
+| Collectives | **Offsetting cost (Measured)** | Megakernel CC +8.8–9.2 µs/layer over lib MoE (trn3: +14.3). Together with its scalar-engine saving (−25 µs summed) the short-context wall is a wash. |
+
+What it shows: on trn2 the megakernel's advantage over library MoE is the context-dependent attention cost that XLA attention pays and the fused NKI attention doesn't. Fusion itself (sync/DMA boundary savings) contributes nothing measurable; extra collective time cancels its other savings. This is the confound the plan flagged: the trn2 "fusion gain" is an attention-kernel gain. Task 4 (config D) tests it directly.
+
+Surprising: megakernel HBM reads and DMA packets are identical across buckets (all its bucket NEFFs are the same size, 5.17/5.22 MB): its attention reads the full `seq_len` KV every step, which is still cheap (≈1 MB/layer at 2048).
+
+Open: identify the growing XLA ops (source tags missing); n=1 step per bucket (no variance); whether Gomes's trn3 numbers used the same per-layer convention.

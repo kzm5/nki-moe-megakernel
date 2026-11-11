@@ -15,6 +15,8 @@ Large artifacts (logs, reports, logits, profiles, compiled models) live in `~/ru
 | 2026-11-11 | **XLA, greedy (fair)** | on-device greedy, logits out | 14.91 ms | 15.28 ms | 49.67 | reference | `~/runs/xla_greedy_s768.log` |
 | 2026-11-11 | **XLA + library MoE, greedy (fair)** | on-device greedy, logits out | 10.30 ms | 10.98 ms | 63.62 | **no** (0/20 logit_validation) | `~/runs/xlamoe_greedy_s768.log` |
 | 2026-11-11 | **Megakernel, greedy (fair)** | on-device greedy, logits out | 10.12 ms | 10.57 ms | 64.64 | **no** (0/20 logit_validation) | `~/runs/nki_greedy_s768.log` |
+| 2026-11-11 | Library MoE vs megakernel, greedy, **n=5** | on-device greedy, logits out | 10.328 ± 0.036 vs **10.113 ± 0.020** ms | 11.09 vs **10.59** ms | – | no | Task 5 |
+| 2026-11-11 | Library MoE vs megakernel, greedy, **seq 2048** | on-device greedy, logits out | 10.839 vs **10.233** ms (1.059×) | 11.36 vs **10.48** ms | – | no | Task 6 |
 
 First three rows are an unfair comparison: the megakernel forces on-device sampling, the XLA configs sample on the host from full-vocab logits. Fair greedy rebuilds are Task 1–2 below.
 
@@ -242,3 +244,30 @@ Each rerun: ~9.5 min wall (pre-sharded load), peak RSS 54–65 GiB. Logs `~/runs
 What it shows (Measured): the megakernel is faster than library MoE by **0.215 ms/step (2.1%) at p50**, ~6–10× the run-to-run std (Welch t ≈ 11.6, ranges do not overlap: slowest megakernel 10.128 < fastest library MoE 10.304). At p99 the gap is 0.50 ms (4.5%). The Task 2 single-run numbers (10.30 / 10.12) sit inside these distributions.
 So the trn2 fusion gain is real but small: 1.021× p50, 1.047× p99, vs 1.16× on trn3 (README).
 Open: is the p99 gap (tail) from fewer graph boundaries, i.e. less jitter, rather than a faster steady state? Needs the per-layer profile (Task 4, blocked).
+
+## 2026-11-11 — Task 6: sequence-length sweep (greedy flags, no pre-shard)
+
+```bash
+bash ~/runs/sweep.sh   # for s in 256 512 1024 2048: run_job.sh sweep_{libmoe,nki}_s$s ... --seq-len $s --on-device-sampling --top-k 1 --do-sample "" --output-logits
+```
+All 8 builds compiled, loaded and benchmarked (exit 0, no NEFF arch errors); 17–45 min each, peak RSS 119.5–122.1 GiB. Logs `~/runs/sweep_{libmoe,nki}_s{256,512,1024,2048}.log`, status `~/runs/sweep_status.log`. 768 row = Task 5 means (n=5); others single runs (Task 5 std ≈ 0.02–0.04 ms at p50).
+
+| seq_len | libMoE TKG p50 | Megakernel TKG p50 | Speedup p50 | libMoE TKG p99 | Megakernel TKG p99 | Speedup p99 |
+|---|---|---|---|---|---|---|
+| 256 | 10.206 | 10.226 | 0.998× | 10.533 | 10.564 | 0.997× |
+| 512 | 10.379 | 10.194 | 1.018× | 10.752 | 10.808 | 0.995× |
+| 768 | 10.328 | 10.113 | 1.021× | 11.092 | 10.589 | 1.047× |
+| 1024 | 10.655 | 10.227 | 1.042× | 11.082 | 10.709 | 1.035× |
+| 2048 | 10.839 | 10.233 | **1.059×** | 11.360 | 10.482 | **1.084×** |
+
+CTE p50: library MoE 382.0–382.4 ms, megakernel 401.6–401.9 ms at every length.
+
+What it shows:
+- **Measured:** megakernel decode latency is flat across context (10.11–10.23 ms from 256 to 2048); library MoE decode grows 10.21 → 10.84 ms (+6%). The fusion gain is zero at 256 and grows with context to 1.06× (p50) / 1.08× (p99) at 2048.
+- **Hypothesis:** the growth is in the XLA attention path of the library-MoE config (KV read/QK/softmax scale with context and pay per-layer graph-boundary/HBM round-trips), while the megakernel's fused attention (`attention_block_tkg`, s_prior sharded across both LNC cores) hides the extra KV traffic. The MoE half is the same work in both. Confirming needs the per-layer profile (Task 4).
+- **Surprising:** the 768-token gain (2.1%) understates the megakernel; Qwen3.6-style long-context decode is where it pays. The README's trn3 number (1.16×) was at 640 tokens; on trn2 even 2048 gives only 1.06×.
+- **Measured:** the megakernel's CTE is a constant +19.5 ms (+5.1%) slower — CTE is XLA in both, so this is the megakernel model class's CTE compile flags or graph, not the kernel.
+
+Open questions:
+- Does the megakernel stay flat at 4096/8192 (attention_tkg switches to flash-attention tiling above 8K per core)?
+- Repeat 256/512 with n=5: the 256 and 512 differences are within ~1–5× noise.

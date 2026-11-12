@@ -378,6 +378,8 @@ python tools/compare_golden.py                                                  
 Both NKI builds are within the ρ ≤ 1.25 strawman gate on these positions: before divergence they are as accurate as XLA against fp32.
 
 ### The divergence positions themselves — Measured
+
+> **Correction (day 3):** the "identical context" premise below is false for all 16 "gross" cases — the emitted tokens had already split at an exact tie one or more steps earlier. See "Day 3: the day-2 gross single-step errors were an analysis artifact". The gross/benign split and the defect hypothesis in this section are retracted.
 At a build's first divergence the context is still identical to XLA's, so those logits are comparable too (they are excluded from ρ above). Two classes separate cleanly:
 
 | | Library MoE (19 divergences) | Megakernel (18) |
@@ -611,4 +613,30 @@ PRESHARD=0 bash ~/runs/run_replay.sh replay_libmoe_onload libmoe ~/qwen-30b-a3b/
 What it shows:
 - **Measured:** the gross errors are deterministic and reproduce exactly when the same sequence of `generate()` calls is run in a fresh process. Pre-sharded vs shard-on-load weights is not the cause (the replay sharded on load), so the planned pre-shard replay (R2) was dropped.
 - **Measured (with T1):** the same positions are golden-correct when each prompt is preceded only by one teacher-forced pass of the previous prompt (census). So the output of a decode step depends on what earlier generate calls in the process did, not only on the current prompt's tokens. XLA shows no such dependence (bit-identical across both histories).
-- **Hypothesis:** the NKI MoE TKG kernel (common to both NKI builds) reads device memory that a previous execution wrote — e.g. a scratch/`shared_hbm` buffer or a cache region that is read before being written for some routing patterns — so stale contents leak into later steps. `history_probe.py` narrows which prior call is responsible.
+- **Superseded (history probe, below):** history has no effect; the replay matched day 1 because it repeated the same free-running passes.
+- **Hypothesis (refuted later the same night):** the NKI MoE TKG kernel (common to both NKI builds) reads device memory that a previous execution wrote — e.g. a scratch/`shared_hbm` buffer or a cache region that is read before being written for some routing patterns — so stale contents leak into later steps. `history_probe.py` narrows which prior call is responsible.
+
+## 2026-11-12 — Day 3: the day-2 "gross single-step errors" were an analysis artifact (CORRECTION)
+
+```bash
+bash ~/runs/run_py.sh history_libmoe tools/history_probe.py libmoe <build> ~/runs/replay/history_libmoe.json --pairs 0:1:15,5:6:4
+bash ~/runs/run_py.sh free_<b> tools/free_tokens.py <b> <build> ~/runs/replay/free_<b>.json   # fresh free-running, emitted tokens saved
+python tools/tie_audit.py                                                                   # -> ~/runs/triage/tie_audit.json
+```
+
+**History probe (Measured):** teacher-forced p01 and p06 are bit-identical to a fresh run after every history tried — teacher-forced / free-running / long-prefill passes of the previous prompt, the full day-1 `logit_validation` sequence on it, and a repeat (12/12 conditions, 0 gross). The "history-dependent" hypothesis from the replay section is wrong: the replay reproduced day 1 because it repeated the same *free-running* passes, not because of earlier state.
+
+**Free-running token audit (Measured):** saving the tokens each build actually emitted shows that at an exact top-2 tie in its own scores (e.g. p02 step 110: 33.25 vs 33.25) the on-device sampler emits a different token than the host argmax of the returned scores. XLA's emitted tokens also differ from XLA's own argmax at 27 of its 36 exact ties. Day 1/2 located "first divergence" by comparing argmaxes of returned scores, not emitted tokens, so when the emitted tokens split at a tie the context at the next step already differed — and that next step was reported as the divergence, with "identical context" assumed.
+
+| Day-1 first divergences | Library MoE | Megakernel |
+|---|---|---|
+| "Gross" (day-2 class) | 7 | 9 |
+| … with the emitted token already different at an earlier step (contexts not identical) | **7 / 7** | **9 / 9** |
+| … that earlier step was an exact top-2 tie in the build's scores / in XLA's scores | 5 / 2 | 5 / 4 |
+| "Benign" with identical contexts at the divergence | 11 / 12 | 8 / 9 |
+
+What it shows:
+- **Measured:** every day-2 "gross single-step error" (KL 0.9–25 nats, ρ at divergence 8–63) was a comparison of outputs computed on *different* contexts, after a tie-broken token split one or more steps earlier. Under identical contexts (teacher-forced census, T1) neither NKI build has a single gross position in 5,632 (max KL 0.56 / 0.86), and both match XLA's accuracy against fp32 (ρ 0.91 / 0.94).
+- **Measured:** the "lead/lag" shift matches in T0 follow from this: the NKI output was a correct prediction for its own, already different, context.
+- **Retracted:** day-2 Task 2 statements that "at the first-divergence position the context is still identical to XLA's", the gross/benign split, the "shared input-triggered defect in both NKI paths" hypothesis, and day-2 SUMMARY finding 2 / INTERIM section 2's gross-error claims. The pre-divergence ρ results (0.96 / 1.05) stand.
+- **Method fix (Measured necessity):** first-divergence analysis must compare *emitted tokens*, not argmaxes of returned scores; teacher forcing (T1 harness) removes the issue entirely. Exact bf16 top-2 ties are common (36 in XLA's 2,560 steps) and the on-device sampler's tie-break differs from `argmax`.

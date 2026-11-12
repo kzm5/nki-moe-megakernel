@@ -17,6 +17,9 @@ Large artifacts (logs, reports, logits, profiles, compiled models) live in `~/ru
 | 2026-11-11 | **Megakernel, greedy (fair)** | on-device greedy, logits out | 10.12 ms | 10.57 ms | 64.64 | **no** (0/20 logit_validation) | `~/runs/nki_greedy_s768.log` |
 | 2026-11-11 | Library MoE vs megakernel, greedy, **n=5** | on-device greedy, logits out | 10.328 ± 0.036 vs **10.113 ± 0.020** ms | 11.09 vs **10.59** ms | – | no | Task 5 |
 | 2026-11-11 | Library MoE vs megakernel, greedy, **seq 2048** | on-device greedy, logits out | 10.839 vs **10.233** ms (1.059×) | 11.36 vs **10.48** ms | – | no | Task 6 |
+| 2026-11-11 | **Config D** (lib MoE + NxDI NKI attention), greedy, n=3 | on-device greedy, logits out | 12.076 ± 0.044 (768), 12.081 ± 0.101 (2048) | 12.46–12.63 / 12.47–12.75 | – | no | Day 2 Task 4 |
+| 2026-11-12 | Library MoE vs megakernel, greedy, **seq 4096** | on-device greedy, logits out | 11.195 vs **10.441** ms (1.072×) | 11.91 vs **11.05** ms | – | no | Day 2 Task 7 |
+| 2026-11-12 | XLA / lib MoE / megakernel, greedy, **n=5** (day 2) | on-device greedy, logits out | 15.076 ± 0.093 / 10.310 ± 0.008 / **10.154 ± 0.043** | 15.72 / 11.05 / **10.66** | – | ρ vs fp32 golden: 1 / 0.96 / 1.05 | Day 2 Task 6, Task 2 |
 
 First three rows are an unfair comparison: the megakernel forces on-device sampling, the XLA configs sample on the host from full-vocab logits. Fair greedy rebuilds are Task 1–2 below.
 
@@ -491,3 +494,36 @@ Both compiled, loaded and benchmarked (exit 0). Compile 1,491 s (lib MoE) / 1,41
 768 = Task 5 means (n=5); 4096 single runs. CTE p50 at 4096: 382.5 / 401.9 ms (same +19.4 ms megakernel offset as at every other length).
 
 What it shows (Measured): the gain keeps growing with context but more slowly (1.06× → 1.07×). The megakernel is no longer flat: +0.21 ms from 2048 to 4096 (lib MoE +0.36). Consistent with Task 1: its attention reads the full `seq_len` KV every step, which at 4096 is ≈2 MB/layer/rank and starts to show. Hypothesis: beyond 4096 the megakernel's fixed full-cache read would cost more than XLA's bucketed attention at short positions.
+
+## 2026-11-12 — Task 6 (day 2): noise floor, XLA / library MoE / megakernel at 768
+
+```bash
+bash ~/runs/noise10.sh xla 1        # timing run: 14:15 wall (> 8 min) -> 5 runs per config
+bash ~/runs/noise5_all.sh           # per config: preshard.py, 5 x run_job.sh ... --save-sharded-checkpoint --skip-compile, delete shards
+```
+Pre-sharding (`preshard.py`): XLA 505 s, lib MoE 3,127 s, megakernel 2,587 s (peak RSS 112–121 GiB). Disk holds one pre-sharded set at a time, so runs are consecutive per config, not interleaved as on day 1. Per-run wall: first run per config 10.5–14.3 min (cold page cache), later runs 4.7–6.3 min. Deletions logged in `~/runs/deletions.log`.
+
+| TKG p50 (ms) | r1 | r2 | r3 | r4 | r5 | mean | std | min | max |
+|---|---|---|---|---|---|---|---|---|---|
+| XLA | 14.985 | 15.078 | 15.013 | 15.081 | 15.226 | **15.076** | 0.093 | 14.985 | 15.226 |
+| Library MoE | 10.315 | 10.298 | 10.318 | 10.314 | 10.306 | **10.310** | 0.008 | 10.298 | 10.318 |
+| Megakernel | 10.209 | 10.190 | 10.116 | 10.122 | 10.131 | **10.154** | 0.043 | 10.116 | 10.209 |
+
+| | XLA | Library MoE | Megakernel |
+|---|---|---|---|
+| TKG p99 mean ± std | 15.719 ± 0.151 | 11.047 ± 0.023 | 10.655 ± 0.097 |
+| E2E p50 mean ± std | 15,889 ± 238 ms | 11,901 ± 41 ms | 11,855 ± 175 ms |
+
+Day 1 vs day 2 (n=5 each):
+| | Day 1 | Day 2 | Pooled n=10 |
+|---|---|---|---|
+| Library MoE | 10.328 ± 0.036 | 10.310 ± 0.008 | 10.319 |
+| Megakernel | 10.113 ± 0.020 | 10.154 ± 0.043 | 10.134 |
+| Gap | 0.215 ms (2.1%) | 0.156 ms (1.5%) | 0.185 ms (1.8%) |
+| XLA | 14.91 (n=1) | 15.076 ± 0.093 | – |
+
+What it shows (Measured):
+- The megakernel is faster than lib MoE on both days with non-overlapping ranges (day 2: slowest megakernel 10.209 < fastest lib MoE 10.298). The gap is 1.5–2.1% at 768.
+- Between-day drift (megakernel +0.041 ms, XLA +0.17 ms vs day-1 single run) is larger than within-day std, so a ~0.05 ms difference between configs measured on different days is not resolvable; claims need same-session, interleaved runs.
+- Lib MoE over XLA: 1.462× (day 2 means). Megakernel over XLA: 1.485×.
+- Surprising: XLA's within-day std (0.093) is ~10× lib MoE's (0.008).

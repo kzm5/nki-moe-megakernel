@@ -556,3 +556,42 @@ What it shows:
 - **Measured:** gross errors are not at small router margins (median 55th percentile, same as benign and random), so they are not explained by near-tie expert routing in the golden (H2.1 not supported for these).
 - **Measured:** all at absolute positions 8–120, inside TKG bucket 128, none at a bucket edge.
 - **Hypothesis:** the "lead" cases suggest the step reads state belonging to a different token/slot (e.g. a stale or misindexed buffer) rather than accumulated rounding; the teacher-forced census and the single-step variant (T1) test whether the error depends on earlier decode steps.
+
+## 2026-11-12 — Day 3, T1: teacher-forced census of every position
+
+```bash
+# XLA: free-running capture of 4 long prompts + teacher-forced self-check (shard on load)
+bash ~/runs/run_tf.sh tf_xla xla ~/qwen-30b-a3b/traced_xla_trn2_229_s768_greedy ~/runs/tf/xla \
+  --free ~/runs/val_long/prompts_long.json --tf main=$HOME/runs/val long=$HOME/runs/tf/xla/free
+python tools/golden_fp32.py --dtype fp32 --inputs "$HOME/runs/val_long/expected_p*.pt" --out ~/runs/golden_long
+# NKI builds: teacher-forced 20 short + 4 long, repeat pass, single-step at gross positions
+bash ~/runs/run_tf.sh tf_<b> <b> <build> ~/runs/tf/<b> --tf main=$HOME/runs/val long=$HOME/runs/val_long repeat=$HOME/runs/val \
+  --single main=$HOME/runs/golden_v2=$HOME/runs/val long=$HOME/runs/golden_long=$HOME/runs/val_long
+python tools/census.py --builds libmoe nki     # -> ~/runs/tf/census.json, ~/runs/tf/<b>/census_rows.json
+```
+Harness (`tools/capture_tf.py`): the production `generate()` path, with the adapter's forward wrapped so the on-device sampled token is replaced by XLA's reference token at every step. Long prompts: 4 fixed cuts of the model's README/LICENSE, 520/545/570/595 tokens + 64 new (`~/runs/val_long/prompts_long.json`, sha256 761e9a4f26ef4d25…). Golden for the 20 short prompts: `~/runs/golden_v2`; long: `~/runs/golden_long`. All loads shard weights on load (no pre-sharded weights exist now).
+
+### Harness self-check — Measured
+XLA teacher-forced vs XLA free-running: **bit-identical on 20/20 short prompts (vs day-1 references) and 4/4 long prompts** (outputs and tokens).
+
+### Census, 2,816 positions per build (2,560 short + 256 long) — Measured
+| | Library MoE | Megakernel | XLA (same positions) |
+|---|---|---|---|
+| **Gross** (KL(golden‖build) ≥ 0.2 and KL(golden‖XLA) < 0.01) | **0 / 2,816** (short 0/2,560, long 0/256) | **0 / 2,816** (0/2,560, 0/256) | – |
+| Shared gross positions | 0 | 0 | – |
+| KL histogram [0,1e-3) / [1e-3,1e-2) / [1e-2,0.05) / [0.05,0.2) / [0.2,1) / ≥1 | 2,050 / 668 / 83 / 13 / 1 / 0 | 1,999 / 702 / 105 / 7 / 2 / 0 | 2,009 / 688 / 109 / 8 / 1 / 0 |
+| Max per-position KL (at) | 0.565 (p00@6) | 0.858 (p03@92) | – |
+| KL mean | 1.94e-3 | 2.28e-3 | 1.88e-3 |
+| ρ over all positions (with = without gross) | **0.909** | **0.935** | 1 |
+| top-1 = golden | 98.5% | 98.9% | – |
+| In-process determinism (repeat pass, 20 short prompts) | 20/20 bit-identical | 20/20 bit-identical | – |
+| Cross-process vs day-1 free-running, up to first divergence | 12/20 prompts, 901/955 positions identical | 10/20 prompts, 685/729 positions identical | XLA: 20/20 (day-2 Task 3) |
+| Single-step variant | not run: no gross positions to test | not run | – |
+
+**Every day-1 gross error fails to reproduce (Measured).** For each build, the positions where today's teacher-forced output differs from the day-1 free-running output (same context) are exactly the day-1 gross first divergences — p01@15, p02@111, p03@27, p05@112, p06@4, p17@27 (lib MoE); p00@32, p01@15, p02@5, p05@2, p06@4, p08@5, p10@21, p13@14 (megakernel) — plus short drifts before p07@45 (both) and in p13/p11. At every day-1 gross position today's output agrees with golden: KL(golden‖today) ≤ 0.013 vs 1.2–24.8 on day 1.
+
+What it shows:
+- **Measured:** in a fresh process, neither NKI build makes a single gross error over 5,632 teacher-forced positions; both are as accurate as XLA against fp32 golden (ρ 0.91 / 0.94) and bit-deterministic within a process.
+- **Measured:** the day-1 gross errors were specific to the day-1 validation processes, not a deterministic function of the input context. The NKI builds are not bit-reproducible across processes; XLA is.
+- **Hypothesis (two candidates, tested next):** (a) state left by the day-1 `validate.py` call sequence (it runs `logit_validation` — dozens of generate calls of varying length per prompt — before the next prompt's first pass), or (b) the day-1 processes loaded **pre-sharded** weights written at compile time, whereas today's shard on load.
+- Consequence for T2: the bisect targets (p01@15, p06@4, p07@45, census gross) do not fail in a fresh process, so a per-layer bisect against golden needs the failure to be reproduced first (replay, below).

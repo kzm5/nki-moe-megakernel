@@ -110,7 +110,7 @@ def main():
         s.update(rho_all=float(rl.mean() / xrl.mean()), rho_without_gross=float(rl[mask].mean() / xrl[mask].mean()),
                  kl_mean=float(kl_t.mean()), kl_mean_without_gross=float(kl_t[mask].mean()),
                  xla_kl_mean=float(xk.mean()), max_kl=float(kl_t.max()),
-                 max_kl_at=[(r["prompt"], r["pos"]) for r in rows if r["kl"] == float(kl_t.max())][0],
+                 max_kl_at=(rows[int(kl_t.argmax())]["prompt"], rows[int(kl_t.argmax())]["pos"]),
                  top1_golden=float(torch.tensor([r["top1"] for r in rows]).double().mean()),
                  determinism_in_process=f"{det_in[0]}/{det_in[1]} short prompts bit-identical (repeat pass)",
                  determinism_cross_process=f"{det_x[2]}/20 prompts, {det_x[0]}/{det_x[1]} positions identical to day-1 free-running (fp16) up to first divergence",

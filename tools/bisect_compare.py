@@ -1,10 +1,10 @@
 """Per-layer error vs fp32 golden at target decode positions, from tensor-capture builds.
 
 Computes (per target, per layer, per build):
-    rel-L2 vs golden of: residual into the layer, attention-block output, residual after attention
-    (= MoE input, pre-norm), MoE-block output; ratio build/XLA when an XLA capture exists;
-    router top-8 recomputed on CPU from the build's pre-norm MoE input with the HF post-attention
-    RMSNorm and gate weights, vs golden's top-8
+    rel-L2 vs golden of: residual into the layer, attention-block output, MoE input after the
+    post-attention RMSNorm, MoE-block output; ratio build/XLA when an XLA capture exists;
+    router top-8 recomputed on CPU from the build's normalized MoE input with the HF gate weights
+    (fused NKI path: raw residual captured, normalized on CPU), vs golden's top-8
 Reports the first layer where any ratio exceeds --jump (default 10x) and which tensor departs first.
 
 Usage:
@@ -25,13 +25,15 @@ def rel(a, b):
     return float((a - b).norm() / b.norm())
 
 
-def device_layers(cap, p):
+def device_layers(cap, p, mlp_in_normalized, norm):
+    """mlp.in is the post-attention-RMSNorm output for XLA, the raw residual for the fused NKI MoE path."""
     t, names = cap["tensors"][p], cap["names"]
     d = {n: x.reshape(-1, x.shape[-1])[-1] for n, x in zip(names, t)}  # last row = current token
     out = []
     for i in range(N_LAYERS):
+        x = d[f"layers.{i}.mlp.in"]
         out.append({"resid_in": d[f"layers.{i}.input_layernorm.in"], "attn_out": d[f"layers.{i}.self_attn.o_proj.out"],
-                    "resid_mid": d[f"layers.{i}.mlp.in"], "moe_out": d[f"layers.{i}.mlp.out"]})
+                    "moe_in": x if mlp_in_normalized else norm(x, i), "moe_out": d[f"layers.{i}.mlp.out"]})
     return out
 
 
@@ -49,37 +51,41 @@ def main():
     norm_w = [W.load(f"model.layers.{i}.post_attention_layernorm.", torch.float32)["weight"] for i in range(N_LAYERS)]
     gate_w = [W.load(f"model.layers.{i}.mlp.gate.", torch.float32)["weight"] for i in range(N_LAYERS)]
 
-    def router_top8(x, i):
+    def norm(x, i):
         x = x.double()
-        h = x * torch.rsqrt(x.pow(2).mean() + eps) * norm_w[i].double()
-        return set((gate_w[i].double() @ h).topk(8).indices.tolist())
+        return x * torch.rsqrt(x.pow(2).mean() + eps) * norm_w[i].double()
+
+    def router_top8(h, i):
+        return set((gate_w[i].double() @ h.double()).topk(8).indices.tolist())
 
     res = []
     for gf in sorted(glob.glob(f"{a.golden}/dump_p*.pt")):
         g = torch.load(gf)
         nn = int(os.path.basename(gf)[len("dump_p"):-3])
         for j, p in enumerate(g["positions"]):
-            gl = [{"resid_in": g["layer_in"][i, j], "attn_out": g["attn_out"][i, j],
-                   "resid_mid": g["layer_in"][i, j] + g["attn_out"][i, j], "moe_out": g["moe_out"][i, j],
-                   "top8": set(g["router"][i, j].topk(8).indices.tolist())} for i in range(N_LAYERS)]
+            gl = [{"resid_in": g["layer_in"][i, j], "attn_out": g["attn_out"][i, j], "moe_in": g["moe_in"][i, j],
+                   "moe_out": g["moe_out"][i, j], "top8": set(g["router"][i, j].topk(8).indices.tolist())}
+                  for i in range(N_LAYERS)]
             row = {"prompt": nn, "pos": p, "layers": []}
             dev = {}
             for b, d in builds.items():
                 cf = f"{d}/cap_p{nn:02d}.pt"
                 if os.path.exists(cf):
                     cap = torch.load(cf)
-                    if p in cap["tensors"]:
-                        dev[b] = device_layers(cap, p)
+                    if p in cap["tensors"] and cap["tensors"][p][0].numel() > 1:  # (1,) = capture fallback
+                        dev[b] = device_layers(cap, p, b == "xla", norm)
+            if not dev:
+                continue
             for i in range(N_LAYERS):
                 L = {"layer": i}
                 for b, dl in dev.items():
-                    for k in ("resid_in", "attn_out", "resid_mid", "moe_out"):
+                    for k in ("resid_in", "attn_out", "moe_in", "moe_out"):
                         L[f"{b}.{k}"] = rel(dl[i][k], gl[i][k])
-                    L[f"{b}.router_top8_match"] = len(router_top8(dl[i]["resid_mid"], i) & gl[i]["top8"])
+                    L[f"{b}.router_top8_match"] = len(router_top8(dl[i]["moe_in"], i) & gl[i]["top8"])
                 if "xla" in dev:
                     for b in dev:
                         if b != "xla":
-                            for k in ("resid_in", "attn_out", "resid_mid", "moe_out"):
+                            for k in ("resid_in", "attn_out", "moe_in", "moe_out"):
                                 L[f"{b}/xla.{k}"] = L[f"{b}.{k}"] / max(L[f"xla.{k}"], 1e-12)
                 row["layers"].append(L)
             first = None

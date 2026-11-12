@@ -640,3 +640,41 @@ What it shows:
 - **Measured:** the "lead/lag" shift matches in T0 follow from this: the NKI output was a correct prediction for its own, already different, context.
 - **Retracted:** day-2 Task 2 statements that "at the first-divergence position the context is still identical to XLA's", the gross/benign split, the "shared input-triggered defect in both NKI paths" hypothesis, and day-2 SUMMARY finding 2 / INTERIM section 2's gross-error claims. The pre-divergence ρ results (0.96 / 1.05) stand.
 - **Method fix (Measured necessity):** first-divergence analysis must compare *emitted tokens*, not argmaxes of returned scores; teacher forcing (T1 harness) removes the issue entirely. Exact bf16 top-2 ties are common (36 in XLA's 2,560 steps) and the on-device sampler's tie-break differs from `argmax`.
+
+## 2026-11-12 — Day 3, T2: per-layer comparison against golden (was "bisect")
+
+No position fails under identical context (T1 census, correction above), so there is no defect to bisect. T2 was run as the planned per-layer table at the named targets plus the largest-KL census positions: p01@15, p06@4, p07@45, p00@6, p17@41 (largest NKI-specific KL, shared by both builds), p03@92, p15@86, p23@4.
+
+```bash
+python tools/golden_fp32.py --dtype fp32 --inputs "$HOME/runs/val/expected_p*.pt" "$HOME/runs/val_long/expected_p*.pt" \
+  --out ~/runs/bisect/golden --dump 1:15,6:4,7:45,0:6,17:41,23:4,3:92,15:86          # per layer: layer_in, attn_out, moe_in, router[128], moe_out
+bash ~/runs/run_py.sh cap_libmoe tools/capture_layers.py libmoe ~/qwen-30b-a3b/traced_xlamoe_trn2_229_s768_capture ~/runs/bisect/libmoe --targets …
+bash ~/runs/run_py.sh cap_xla    tools/capture_layers.py xla    ~/qwen-30b-a3b/traced_xla_trn2_229_s768_capture    ~/runs/bisect/xla    --targets …
+python tools/bisect_compare.py --builds libmoe=$HOME/runs/bisect/libmoe xla=$HOME/runs/bisect/xla   # -> ~/runs/bisect/bisect.json
+```
+Capture builds: NxDI `tensor_capture_config` with `modules_to_capture` = per layer `input_layernorm`, `self_attn.o_proj`, `mlp`, `capture_inputs=True` (288 tensors per decode step); compile 1,003 s (lib MoE) / 1,043 s (XLA). The fused NKI path never calls the router module, so router top-8 is recomputed on CPU (fp64, HF gate weights) from each build's captured MoE input; on the fused path `mlp.in` is the raw residual and is RMS-normalized on CPU, on the XLA path it is already normalized.
+
+Checks (Measured): the lib MoE capture build's outputs are bit-identical to the non-capture build at all targets (capture does not change scheduling/numerics). Capture only returned data in TKG bucket 128: p23@4 (position 599, bucket 768) returned NxDI's `(1,)` fallback tensors for every module and is excluded.
+
+| Target | lib MoE: max residual rel-L2 / layers with router top-8 ≠ golden | XLA: same | Max lib MoE / XLA ratio (attention out / MoE out) | First layer with ratio > 10× |
+|---|---|---|---|---|
+| p00@6 | 0.105 / 16 | 0.074 / 8 | 9.7 / 7.1 | none |
+| p01@15 | 0.058 / 4 | 0.062 / 5 | 2.5 / 10.1 | L7, MoE output |
+| p03@92 | 0.034 / 2 | 0.043 / 1 | 4.1 / 16.3 | L10, MoE output |
+| p06@4 | 0.011 / 0 | 0.046 / 2 | 1.2 / 1.2 | none |
+| p07@45 | 0.015 / 0 | 0.057 / 4 | 1.2 / 1.4 | none |
+| p15@86 | 0.135 / 15 | 0.087 / 20 | 2.2 / 2.4 | none |
+| p17@41 | 0.084 / 8 | 0.066 / 3 | 3.3 / 12.4 | L15, MoE output |
+
+At the three jumps (rel-L2 vs golden):
+| Target, layer | lib MoE attn / MoE in / MoE out | XLA attn / MoE in / MoE out | lib MoE router top-8 (recomputed) | Golden 8th−9th router gap at that layer |
+|---|---|---|---|---|
+| p01@15, L7 | 0.027 / 0.011 / **0.156** | 0.032 / 0.013 / 0.015 | 8/8 | **0.00008** (smallest of 336 layer-positions; median 0.065) |
+| p03@92, L10 | 0.018 / 0.012 / **0.212** | 0.018 / 0.011 / 0.013 | **7/8** | 0.00403 (4th percentile) |
+| p17@41, L15 | 0.047 / 0.044 / **0.213** | 0.027 / 0.017 / 0.021 | **7/8** | 0.03505 (33rd percentile; input already 2.6× XLA's error) |
+
+What it shows:
+- **Measured:** wherever lib MoE departs from golden by more than 10× XLA's error, it is the MoE-block output of a single layer, with that layer's attention output and MoE input no worse than XLA's (ratio ~1). The error then propagates (next layer's residual 4–5× XLA's) and decays/accumulates like XLA's own.
+- **Measured:** at two of three jumps the router recomputed from lib MoE's own MoE input selects a different 8-expert set than golden (one swap); at the third the golden router margin is the smallest in the sample (8e-5). Positions with the largest final KL (p00@6, p15@86, p17@41) have router-set differences in 8–16 layers for lib MoE; the cleanest (p06@4, p07@45) have none.
+- **Hypothesis (H2.1 supported):** these are expert swaps at near-tie router margins — the dominant mechanism of lib MoE's larger single-layer departures — not a kernel defect; the p01@15 L7 case suggests the kernel's own (lower-precision) routing flips where an fp64 recompute does not. Not tested: the kernel's internal router logits (not exposed by module capture).
+- **Not run:** megakernel per-layer capture (its 48 layers are one NKI kernel; module-level capture has no per-layer modules to hook). The standalone-kernel fallback (step 4) was not needed.

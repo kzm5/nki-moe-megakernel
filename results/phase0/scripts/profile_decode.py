@@ -8,6 +8,9 @@ sys.path.insert(0, os.path.expanduser("~/runs/val"))
 import common as C  # noqa: E402
 C.FLAGS = ["--seq-len", seq, "--on-device-sampling", "--top-k", "1", "--do-sample", "",
            "--output-logits", "--skip-compile"]  # no pre-shard: weights shard on load
+C.KINDS["cfgD"] = (["--moe-fused-nki-kernel-enabled", "--attn-block-tkg-nki-kernel-enabled",
+                    "--attn-block-tkg-nki-kernel-cascaded-attention", "--qkv-kernel-enabled", "--fused-qkv"],
+                   "megakernels.qwen3_moe.qwen")
 import torch  # noqa: E402
 from neuronx_distributed_inference.utils.hf_adapter import HuggingFaceGenerationAdapter  # noqa: E402
 

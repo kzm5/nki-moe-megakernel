@@ -473,3 +473,21 @@ Open: profile D (one capture, ~25 min) to locate the +36 µs/layer; compare D's 
 
 ### Golden reference reproducibility — Measured
 Re-ran `golden_fp32.py` (fixing the router top-9 capture, which saved position 0 only in the first run; output values were unaffected): v1 vs v2 max-abs 3.5e-3, per-position rel-L2 ≤ 3.1e-4, 0/2,560 argmax flips. CPU fp32 is not bit-reproducible across thread schedules (952% vs 452% CPU), but the drift is ~1% of the builds' error vs golden (0.04). Router data: `~/runs/golden_v2/` (`router_top`/`router_ids` `[48, T, 9]`); comparisons above use v1.
+
+## 2026-11-11/12 — Task 7 (day 2): sweep extended to 4096
+
+```bash
+bash ~/runs/sweep4096.sh   # run_job.sh sweep_{libmoe,nki}_s4096 ... --seq-len 4096 --on-device-sampling --top-k 1 --do-sample "" --output-logits
+```
+Both compiled, loaded and benchmarked (exit 0). Compile 1,491 s (lib MoE) / 1,413 s (megakernel); wall 77 / 79 min; the megakernel's attention accepted 4096 at LNC=2 (sharded prior 2048, a multiple of 128).
+
+| seq_len | 256 | 512 | 768 | 1024 | 2048 | **4096** |
+|---|---|---|---|---|---|---|
+| Lib MoE TKG p50 (ms) | 10.21 | 10.38 | 10.33 | 10.66 | 10.84 | **11.20** |
+| Megakernel TKG p50 (ms) | 10.23 | 10.19 | 10.11 | 10.23 | 10.23 | **10.44** |
+| Speedup p50 | 1.00× | 1.02× | 1.02× | 1.04× | 1.06× | **1.072×** |
+| Lib MoE / megakernel TKG p99 (ms) | 10.53 / 10.56 | 10.75 / 10.81 | 11.09 / 10.59 | 11.08 / 10.71 | 11.36 / 10.48 | **11.91 / 11.05** (1.078×) |
+
+768 = Task 5 means (n=5); 4096 single runs. CTE p50 at 4096: 382.5 / 401.9 ms (same +19.4 ms megakernel offset as at every other length).
+
+What it shows (Measured): the gain keeps growing with context but more slowly (1.06× → 1.07×). The megakernel is no longer flat: +0.21 ms from 2048 to 4096 (lib MoE +0.36). Consistent with Task 1: its attention reads the full `seq_len` KV every step, which at 4096 is ≈2 MB/layer/rank and starts to show. Hypothesis: beyond 4096 the megakernel's fixed full-cache read would cost more than XLA's bucketed attention at short positions.

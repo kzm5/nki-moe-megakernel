@@ -27,9 +27,10 @@ All loads shard on load (~10–40 min, peak RSS ~121 GiB). Never delete `~/runs/
 | Task | Status | Commands / paths | Next step |
 |---|---|---|---|
 | T0 triage | **done** 23:30 ET | `tools/triage_gross.py` → `~/runs/triage/triage.json`; FINDINGS "Day 3, T0" | – |
-| T1.1 capture_tf.py | written, testing in XLA run | `tools/capture_tf.py`; wrapper `~/runs/run_tf.sh NAME KIND CDIR OUT args…` | XLA run |
-| T1.2–1.3 XLA self-check + long prompts | **running** (started 23:23 ET) | `capture_tf.py xla ~/qwen-30b-a3b/traced_xla_trn2_229_s768_greedy ~/runs/tf/xla --free ~/runs/val_long/prompts_long.json --tf main=$HOME/runs/val long=$HOME/runs/tf/xla/free` (log `~/runs/tf_xla.log`) | check bit-identity vs `~/runs/val/expected_*`; copy `free/` → `~/runs/val_long/`; golden on long prompts |
-| T1.4–1.5 NKI census | pending | per build: `--tf main=… long=… repeat=… --single main=… long=…` | after golden long |
+| T1.1 capture_tf.py | **done, validated** | `tools/capture_tf.py`; wrapper `~/runs/run_tf.sh NAME KIND CDIR OUT args…` | – |
+| T1.2–1.3 XLA self-check + long prompts | **done** 00:00 ET | `run_tf.sh tf_xla xla ~/qwen-30b-a3b/traced_xla_trn2_229_s768_greedy ~/runs/tf/xla --free ~/runs/val_long/prompts_long.json --tf main=$HOME/runs/val long=$HOME/runs/tf/xla/free`. **TF == free-running bit-identical 20/20 short, 4/4 long.** Long refs copied to `~/runs/val_long/expected_p20..23.pt` | – |
+| T1.3b golden long | **running** 00:00 ET | `run_cpu.sh golden_long tools/golden_fp32.py --dtype fp32 --inputs ~/runs/val_long/expected_p*.pt --out ~/runs/golden_long` | then libMoE process |
+| T1.4–1.5 NKI census | pending | per build: `run_tf.sh tf_<b> <b> <cdir> ~/runs/tf/<b> --tf main=$HOME/runs/val long=$HOME/runs/val_long repeat=$HOME/runs/val --single main=$HOME/runs/golden_v2=$HOME/runs/val long=$HOME/runs/golden_long=$HOME/runs/val_long` | libMoE first, then megakernel |
 | T1 census | pending | `tools/census.py` | |
 | T2 bisect | pending | | |
 | T3 profile D | optional | | |

@@ -527,3 +527,32 @@ What it shows (Measured):
 - Between-day drift (megakernel +0.041 ms, XLA +0.17 ms vs day-1 single run) is larger than within-day std, so a ~0.05 ms difference between configs measured on different days is not resolvable; claims need same-session, interleaved runs.
 - Lib MoE over XLA: 1.462× (day 2 means). Megakernel over XLA: 1.485×.
 - Surprising: XLA's within-day std (0.093) is ~10× lib MoE's (0.008).
+
+## 2026-11-11/12 — Day 3, T0: CPU triage of first divergences
+
+```bash
+python tools/triage_gross.py   # ~/runs/golden_v2 + day-1 captures -> ~/runs/triage/triage.json
+```
+Gross = KL(golden‖build) ≥ 0.2 and KL(golden‖XLA) < 0.01 at the first-divergence position (the census threshold); 16 gross (7 lib MoE, 9 megakernel) and 21 benign first divergences.
+
+| | Gross (16) | Benign (21) | All 2,560 generated positions |
+|---|---|---|---|
+| Best-matching golden position for the build's output (p−1 / p / p+1) | 5 / 6 / 5 | 0 / 21 / 0 | – |
+| Golden router min-over-layers 8th−9th gap, median | 0.00144 | 0.00128 | 0.00127 (p10 0.00020, p90 0.00424) |
+| Same, median percentile vs all positions | 0.55 | 0.50 | – |
+| TKG bucket / near a bucket edge (±2) | all 128 / 0 | all 128 / 1 | – |
+
+Strongest shift matches (KL(build@p ‖ golden@q)):
+| Build | Position | q = p−1 | q = p | q = p+1 |
+|---|---|---|---|---|
+| megakernel | p13@14 | 11.17 | 11.70 | **0.06** |
+| lib MoE / megakernel | p06@4 | 11.83 / 11.76 | 11.78 / 11.73 | **0.42 / 0.55** |
+| lib MoE | p02@111 | 20.02 | 16.62 | **0.42** |
+| megakernel | p02@5 | 11.44 | 6.98 | 1.69 |
+| lib MoE / megakernel | p01@15 | 11.22 / 11.11 | 19.57 / 19.53 | 18.71 / 18.74 |
+
+What it shows:
+- **Measured:** in 4 of 16 gross cases the NKI output at position p nearly equals golden's output at p+1, i.e. a prediction as if XLA's token p were already in context (" of" after "a new", where golden predicts " pair" then " of"). The other gross cases match no neighbour (KL 4–20 at all three).
+- **Measured:** gross errors are not at small router margins (median 55th percentile, same as benign and random), so they are not explained by near-tie expert routing in the golden (H2.1 not supported for these).
+- **Measured:** all at absolute positions 8–120, inside TKG bucket 128, none at a bucket edge.
+- **Hypothesis:** the "lead" cases suggest the step reads state belonging to a different token/slot (e.g. a stale or misindexed buffer) rather than accumulated rounding; the teacher-forced census and the single-step variant (T1) test whether the error depends on earlier decode steps.

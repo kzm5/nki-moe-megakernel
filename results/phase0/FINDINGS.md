@@ -20,6 +20,7 @@ Large artifacts (logs, reports, logits, profiles, compiled models) live in `~/ru
 | 2026-11-11 | **Config D** (lib MoE + NxDI NKI attention), greedy, n=3 | on-device greedy, logits out | 12.076 ± 0.044 (768), 12.081 ± 0.101 (2048) | 12.46–12.63 / 12.47–12.75 | – | no | Day 2 Task 4 |
 | 2026-11-12 | Library MoE vs megakernel, greedy, **seq 4096** | on-device greedy, logits out | 11.195 vs **10.441** ms (1.072×) | 11.91 vs **11.05** ms | – | no | Day 2 Task 7 |
 | 2026-11-12 | XLA / lib MoE / megakernel, greedy, **n=5** (day 2) | on-device greedy, logits out | 15.076 ± 0.093 / 10.310 ± 0.008 / **10.154 ± 0.043** | 15.72 / 11.05 / **10.66** | – | ρ vs fp32 golden: 1 / 0.96 / 1.05 | Day 2 Task 6, Task 2 |
+| 2026-11-12 | **Teacher-forced census** lib MoE / megakernel, 2,816 positions each | teacher-forced (XLA tokens) | – | – | – | **0 / 0 gross**; ρ 0.909 / 0.935; max KL 0.56 / 0.86; in-process deterministic | Day 3 T1 |
 
 First three rows are an unfair comparison: the megakernel forces on-device sampling, the XLA configs sample on the host from full-vocab logits. Fair greedy rebuilds are Task 1–2 below.
 

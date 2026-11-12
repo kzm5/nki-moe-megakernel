@@ -1,6 +1,6 @@
 # Trainium Research Plan — Execution & Agent Automation
 
-Nov 10, 2026 · @Kevin
+Nov 11, 2026 · @Kevin
 
 ## Fix these before anything else
 
@@ -39,35 +39,41 @@ Move forward on trn2. The research questions (numerics, fusion granularity, agen
 7. Skills: the repo has both `nki-kernel-optimizer` (trn2) and `nki-kernel-optimizer-trn3`, and the trn3 one declares itself the repo default. Flip that, or agents will load trn3 hardware facts on a trn2 box.
 8. Out of scope but present: a Qwen3.6-35B-A3B speculative-decoding megakernel (DeltaNet hybrid, trn2).
 
-## Phase 0 results so far (Nov 10)
+## Phase 0 results (Nov 11–12)
 
-On trn2 the SDK's library MoE kernel delivers nearly all of the decode speedup: 1.45x over XLA. The megakernel adds 1.02x on top at 768 tokens and 1.06x at 2048. Neither NKI build passes logit validation against XLA, but the two agree with each other. That makes the fp32 golden reference the next deciding experiment. All numbers below come from the fair rebuild on Nov 11: on-device greedy sampling and logits returned for every config.
+On trn2 the SDK's library MoE kernel delivers nearly all of the decode speedup: 1.46x over XLA. The megakernel's extra 1.5–2.1% at 768 tokens, growing to 1.07x at 4096, comes from its attention kernel, not from fusion. Against an fp32 golden, both NKI builds are as accurate as XLA on ordinary positions, but both make occasional gross single-step errors that XLA does not. That defect, not fusion, is now the most important open item. All configs: trn2.3xlarge, SDK 2.29, bs=1, TP=4, LNC=2, on-device greedy sampling, logits returned.
 
-| Config (trn2.3xlarge, SDK 2.29, seq\_len 768, bs=1, TP=4, LNC=2) | Decode p50 | Decode p99 | vs XLA | Passes logit check vs XLA |
-| --- | --- | --- | --- | --- |
-| XLA | 14.91 ms | 15.28 ms | 1.00x | reference |
-| XLA + SDK library MoE kernel | 10.33 ± 0.04 ms (5 runs) | 11.09 ms | 1.45x | 0 of 20 prompts |
-| Megakernel (Gomes) | 10.11 ± 0.02 ms (5 runs) | 10.59 ms | 1.48x | 0 of 20 prompts |
+| Config | Decode p50, seq 768 (n=5, Nov 12) | seq 2048 | seq 4096 | vs XLA at 768 | ρ vs fp32 golden, before first divergence | First divergences that are gross errors |
+| --- | --- | --- | --- | --- | --- | --- |
+| A. XLA | 15.08 ± 0.09 ms | – | – | 1.00x | 1 (reference) | – |
+| B. XLA + SDK library MoE | 10.31 ± 0.01 ms | 10.84 ms | 11.20 ms | 1.46x | 0.96 | 7 of 19 |
+| D. B + NxDI NKI attention kernel | 12.08 ± 0.04 ms (n=3) | 12.08 ms (n=3) | – | 1.25x | not measured | not measured |
+| C. Megakernel (Gomes) | 10.15 ± 0.04 ms | 10.23 ms | 10.44 ms | 1.48x | 1.05 | 9 of 18 |
 
-**The megakernel's lead over library MoE is real but small, and it is not yet attributable to fusion.** The gap is 0.215 ms per step, about 10 times the run-to-run spread. The megakernel's decode time stays near 10.2 ms from 256 to 2048 tokens, while library MoE grows from 10.21 to 10.84 ms, so the lead widens with context: none at 256 tokens, 1.06x at 2048. But in the library-MoE config, attention still runs in XLA. Context-dependent growth is an attention cost, so the megakernel's long-context advantage may come from its NKI attention kernel rather than from fusion. The Spring trn3 1.15x has the same confound. Separating the two needs a fourth config: library MoE plus an unfused NKI attention kernel.
+The 2048 and 4096 columns are single runs. Day-to-day drift (up to 0.04 ms) exceeds within-day spread, so differences under \~0.05 ms need same-session, interleaved runs.
 
-**Correctness: the XLA reference may be the outlier (Hypothesis).**
+**Fusion adds nothing measurable on trn2; the megakernel's lead is an attention effect (Measured).** The per-layer profile shows none of trn3's fusion savings: sync-engine time is 58.5 vs 60.1 µs/layer (trn3: 19.1 vs 53.5), and DMA packet count and size are unchanged (trn3: 43% fewer, 2.7x larger). The megakernel spends 9 µs/layer more in collectives. At the 128 bucket the two builds tie at \~193 µs/layer. From there library MoE grows 10–12 µs/layer with context, in untagged XLA ops whose extra HBM reads equal the extra K/V bytes; the megakernel stays flat. SBUF spill is ruled out (19–24 KB per graph vs library MoE's 213 KB). Config D confirms that an NKI attention kernel alone removes the context slope, but NxDI's kernel costs 1.75 ms/step more than XLA attention, so D cannot isolate fusion. The clean test is Gomes's attention subkernel alone plus library MoE.
 
-- Most divergence points are bf16 near-ties.
-- Peak logit errors reach 3.5–7.7% of the max logit.
-- At two positions, both NKI builds pick the same unlikely token even though they use different MoE kernels.
+**Correctness: XLA is not the outlier; both NKI paths make gross single-step errors (Measured).**
 
-Only an fp32 golden reference can say which build is more accurate.
+- XLA is bit-identical across three processes and two days, so every NKI-vs-XLA difference is real.
+- Before each build's first divergence, both NKI builds match XLA's accuracy against fp32: ρ = 0.96 (library MoE) and 1.05 (megakernel), inside the 1.25 strawman gate.
+- About 40–50% of first divergences are not near-ties. At a context identical to XLA's, the NKI logits are off by 0.9–25 nats KL, where XLA's KL is at most 0.01. Three such positions are shared by both builds (p01@15, p06@4, p07@45). At p01@15 golden and XLA say " is"; both NKI builds say " United" (golden rank 298).
+- The pre-divergence ρ cannot see these errors by construction, and only first divergences have been checked, so the true rate is unknown. Measuring it needs the NKI builds teacher-forced over every position.
+- The 20 prompts average \~10 tokens, so correctness has only been checked below absolute position \~150.
+
+Hypothesis: a defect in the NKI MoE TKG kernel family both builds share (the megakernel vendors the legacy `moe_tkg`). The NKI top-3 at the shared spots look like predictions for a different context, not rounding noise. Thursday's queue tests this.
 
 **Process findings for Section 7:**
 
-- The unattended agent ran 9 h 24 min and wrote 35 ledger lines.
-- It caught a sampling bug on its own: `--top-k 1` alone is not greedy, and 8.9% of tokens were not the argmax. It redid every build before validating anything.
-- Profiling was blocked by a tool-version mismatch: the runtime writes NTFF v7, which aws-neuronx-tools 2.28 can't read.
+- Two unattended queues produced 71 ledger entries. The second finished 21 hours before the Thursday cutoff.
+- The agent caught a sampling bug on its own: `--top-k 1` alone is not greedy, and 8.9% of tokens were not the argmax. It redid every build before validating anything.
+- It cleared the profiling blocker (tools 2.30 plus in-process `nrt_inspect` capture) after two failed attempts, and caught its own golden-script bug (router data saved for position 0 only).
+- It applied the Task 5 trigger (ρ > 1.25) exactly as written and skipped the bisect, but flagged that the metric could not see the errors and asked. A gate followed correctly can still be the wrong gate; that belongs in Section 7.
 
 **What it took to run the Spring code on trn2.** These belong in the report's reproducibility section.
 
-1. The only working combination is SDK 2.29 with fork branch `2.29_release`. The legacy MoE kernels need an nkilib field that was removed in 2.30, and the Qwen3.6 code needs `DtypeMode`, which only exists from 2.31.
+1. The only working combination is SDK 2.29 with fork branch `2.29_release`. The legacy MoE kernels need an nkilib field that was removed in 2.30, and the Qwen3.6 code needs `DtypeMode`, which is absent from the nkilib bundled with SDK 2.30 and from fork 2.30\_release (2.31 untested).
 2. Two hardcoded trn3 targets had to be removed, one in `main.py` and one in `qwen_with_megakernel.py` (applied on import). No trn2 megakernel build had ever loaded before this fix.
 3. `nki_kernels/__init__.py` imported the Qwen3.6 kernels eagerly, which coupled every model to the Qwen3.6 dependencies. It is now lazy.
 4. Megakernel attention at LNC=2 requires seq\_len to be a multiple of 256, so 640 fails.
@@ -76,10 +82,10 @@ Only an fp32 golden reference can say which build is more accurate.
 
 **Where everything lives:**
 
-- branch `phase0/trn2-setup` on Kevin's fork
-- `results/phase0/FINDINGS.md` (lab notebook) and `SUMMARY_2026-11-11.md`
+- branch `phase0/trn2-setup` on Kevin's fork (last commit `050ef03`)
+- `results/phase0/FINDINGS.md` (lab notebook), `SUMMARY_2026-11-11.md`, `INTERIM_2026-11-11.md`, `SUMMARY_2026-11-12.md` (file dates are UTC)
 - `results/phase0/ledger.jsonl`
-- raw logs under `~/runs` on the instance
+- on the instance: raw logs under `~/runs`, fp32 golden outputs and router top-9 in `~/runs/golden_v2`, backup `~/runs_backup.tar.zst` (6.2 GB)
 
 ## Thesis and scope
 
@@ -123,11 +129,12 @@ A candidate kernel is correct if its error against an fp32 golden reference is n
 | Op boundary, every layer | rel-L2, max-abs, cosine vs golden; ρ | median ρ ≤ 1.25 per boundary, no layer above 2 |
 | Router, every layer | top-8 expert-set agreement with golden; flip rate | flip rate no worse than NxDI's + 0.5 pp |
 | Logits, teacher-forced | per-position KL(golden ‖ cand), top-1 agreement | mean KL no worse than NxDI's x 1.25 |
+| Logits, teacher-forced, worst position (added Nov 11) | max per-position KL(golden ‖ cand); count of positions where cand is grossly wrong and NxDI is not | no position with KL > 0.2 nats where NxDI's KL < 0.01 (strawman) |
 | Model quality | perplexity on a fixed eval set | delta vs NxDI within 0.5% |
 | Run-to-run | two identical runs | bit-identical, or nondeterminism documented |
 | Free-running greedy output | first-divergence position vs NxDI | reported only, not a gate |
 
-**Why teacher-forced, not free-running:** in free-running decode, one near-tie argmax flip makes every later token differ. That makes token-match rate a chaos measurement rather than a correctness one. Teacher forcing feeds both models the same reference tokens, so each position's error is measured independently.
+**Why teacher-forced, not free-running:** in free-running decode, one near-tie argmax flip makes every later token differ. That makes token-match rate a chaos measurement rather than a correctness one. Teacher forcing feeds both models the same reference tokens, so each position's error is measured independently. The candidate must be teacher-forced too: Phase 0 compared free-running NKI builds only up to their first divergence, and a mean over those positions hid 25-nat single-step errors.
 
 **Quantized kernels get a separate gate.** They cannot match bf16, so for them the gate is perplexity delta plus one downstream task, agreed with Zhiru before Phase 5 starts.
 
@@ -152,7 +159,7 @@ Each phase lists its experiments in run order and ends with the exit criterion i
 3. Audit the inherited skills (nki-kernel-optimizer, neuron-profile) by running each on a known kernel and checking its output.
 4. If the instance is Trn2: test whether the megakernel compiles at all, and note what has to change (SBUF budget, no MX matmul).
 
-**Exit:** all three configs reproduce within 5% of the Spring numbers on the same hardware, or the gap is explained.
+**Exit:** all three configs run on trn2 with identical sampling settings, each has a measured noise floor, and every difference from the Spring trn3 numbers is either explained or listed as open.
 
 ### Phase 1 — Validation framework
 
@@ -267,22 +274,25 @@ Run each task 3 times per setup, because agent runs are nondeterministic.
 
 ## Next-session decision tree
 
-Three overnight results decide the next step:
+**Nov 11–12 landed between rows.** Fusion: the megakernel is outside noise (1.5–2.1% at 768) but under 5%, and the profile puts its whole lead in attention, so "fusion adds nothing on trn2" holds by mechanism. Neither profile row (SBUF spill, collectives dominate) fired. Correctness: both NKI paths pass ρ before divergence, but the gross single-step errors mean "library MoE worse than XLA against golden" is in force, for the megakernel too.
 
-- Does the megakernel still match library MoE under identical greedy settings?
-- Do both NKI paths pass the correctness check against XLA?
-- What does the per-layer profile show?
+What that changes: the gross-error defect becomes the first Phase 2/3 target ahead of any fusion work; Phase 4's fusion-depth sweep is now a likely negative result on trn2; and the spec gains a worst-position term. Thursday's queue (teacher-forced census of every position, then a per-layer bisect) answers three questions that pick the next row:
 
-| If the overnight run shows | It means | Next step |
+- How common are the gross errors when every position is teacher-forced, and do they repeat run to run?
+- Do they depend on KV-cache state written by earlier decode steps, or only on the current step?
+- Which layer and op first departs from golden?
+
+| If Thursday shows | It means | Next step |
 | --- | --- | --- |
-| Megakernel within noise of library MoE | Fusion adds nothing on trn2 | Phase 4 becomes: why is fusion's benefit hardware-dependent? Compare the trn2 profile against Gomes's trn3 Table 5. |
-| Megakernel at least 5% faster than library MoE | The Nov 10 tie was a sampling artifact | Phase 4 continues as planned with the fusion-depth sweep. |
-| Library MoE fails the check at rtol 1e-2 | AWS's own kernel, the source of all the speedup, diverges from XLA | This becomes the first Phase 2/3 target. Bisect by layer with tensor captures. |
-| Both NKI paths pass | No gross bugs | Build the Phase 1 fp32 golden reference and characterize error rather than hunt bugs. |
-| Megakernel fails, library passes | Fusion is no faster and less accurate on trn2 | Write it up as a negative result and shrink Phase 4. |
-| Profile shows SBUF spill or lost double-buffering | trn2's smaller SBUF breaks the fused design | Test smaller fused regions on trn2 (Phase 4 item 1). |
-| Profile shows collectives dominate | All-reduce overhead cancels the fusion savings | Batch all-reduces across layers (Phase 4 item 2). |
-| Queue incomplete or failed | — | Finish the queue Wednesday. Image the instance Wednesday night regardless. |
+| Errors repeat run to run and first appear at one layer's MoE output, in library MoE | A defect in AWS's library MoE TKG kernel, the source of all the speedup | Phase 3's first target: minimal repro from captured inputs, a workaround, and a report to AWS. Likely the headline finding. |
+| Errors first appear in attention or the residual/norm path, not MoE | The shared defect is outside the MoE kernel | Bisect the shared NxDI decode path (KV write, position ids, residual add) with the same captures. |
+| Errors vanish when only one decode step follows prefill | They depend on KV-cache state written by earlier decode steps | Compare the KV cache against golden K/V at the failing position before touching the MoE kernel. |
+| Errors differ between identical runs | Nondeterminism (a race or missing sync) in an NKI kernel | Repeat-run census on both builds; the spec's run-to-run row fails. |
+| Errors disappear in the tensor-capture build | Capture changed scheduling (a heisenbug) | Standalone kernel test on golden layer inputs instead of in-model capture. |
+| Gross errors in under \~1% of positions, bisect inconclusive | Real but rare | Adopt the worst-position gate, add long prompts to the corpus, carry the bisect into the next Capacity Block. |
+| Next block: Gomes's attention subkernel alone + library MoE matches the megakernel | Fusion adds nothing on trn2 | Gate 4 fails as specified. Phase 4 becomes a written negative result plus the trn2-vs-trn3 mechanism. |
+| Next block: that config is clearly slower than the megakernel | Fusion contributes something the profile missed | Profile the gap before running the fusion-depth sweep. |
+| Thursday queue incomplete | — | Image Thursday night regardless; resume from `RESUME.md` on the next block. |
 
 ## Report outline
 
@@ -292,14 +302,14 @@ The final report argues two things. First, correctness has to be defined against
 | --- | --- | --- | --- |
 | 1. Problem and contributions | — | — | Draft after Phase 2 |
 | 2. Background: Trn2 vs Trn3, NxDI, NKI, MoE decode | — | Docs, Spring reports | Can write now |
-| 3. Reproducibility audit | Prior results were not portable or validated on trn2 | Phase 0 fixes list, ledger | Mostly done |
-| 4. Correctness methodology | fp32 golden plus error ratio beats bit-matching | Spec, validator mutation tests | Phase 1 |
-| 5. Where the speedup comes from | Library MoE vs fusion, trn2 vs trn3 | Three-way tables, per-layer profiles | Overnight run |
-| 6. Divergence characterization | Named mechanisms (router flips, accumulation, reduction order) | Phase 2 ablations | Phase 2 |
-| 7. Agent-assisted workflow | What the harness enables, measured | Ledger, overnight transcript, A/B/C setups | Started Nov 10 |
+| 3. Reproducibility audit | Prior results were not portable or validated on trn2 | Phase 0 fixes list, ledger | Done; ready to write |
+| 4. Correctness methodology | fp32 golden plus error ratio beats bit-matching; a mean-ρ gate misses gross single-step errors | Golden, ρ tables, XLA self-consistency, gross-error census | Golden and ρ done; worst-position gate, teacher-forced NKI census and mutation tests pending |
+| 5. Where the speedup comes from | On trn2: library MoE (1.46x) plus an attention-kernel effect; no measurable fusion saving, unlike trn3 | Four-config table, 256–4096 sweep, per-layer profile vs Gomes's Table 5 | Mostly done; open: Gomes's attention alone + library MoE, config D's +36 µs/layer |
+| 6. Divergence characterization | Named mechanisms, starting with the shared NKI gross errors | Teacher-forced census, per-layer bisect, router margins | Started Thursday |
+| 7. Agent-assisted workflow | What the harness enables, measured | Ledger (71 entries), two unattended queues, A/B/C setups | Two queues logged; A/B/C comparison not started |
 | 8. Limitations and future work | — | — | End |
 
-The Nov 10–11 overnight run is the first data point for Section 7. Keep its Claude Code transcript along with the ledger.
+The Nov 10–11 and Nov 11–12 unattended queues are the first data points for Section 7. Keep their Claude Code transcripts with the ledger.
 
 ## Risks and open questions
 
@@ -308,7 +318,7 @@ The biggest risk is doing this solo: if the harness grows into its own project, 
 | Risk | Effect | Mitigation |
 | --- | --- | --- |
 | Hardware differs from Spring (Trn2 vs trn3), or capacity is short | Baselines don't carry over; device time is the bottleneck | Capacity Blocks end on a fixed date and terminate the instance: code in git, weights and captures on a volume that survives termination plus S3 snapshots, ledger synced off-instance |
-| SDK has drifted from 2.27 | Reproduction fails for reasons unrelated to the kernels | Pin the SDK; reproduce on 2.27 first, upgrade as a separate controlled step |
+| SDK pin breaks (repo needs per-model SDK versions) | Reproduction fails for reasons unrelated to the kernels | Resolved Nov 10: pinned to SDK 2.29 with fork 2.29\_release in its own venv. Any upgrade is a separate, ledgered step. |
 | Megakernel code knowledge left with Gomes | Slow debugging of code you didn't write | Phase 0 audit; have an agent write a design-notes file from the code, then review it yourself |
 | Golden fp32 run is too slow or memory-heavy on CPU | Phase 1 stalls | Layer-by-layer from captured inputs; a subset of layers and positions for the full sweep |
 | Zhiru wants bit-exact NxDI matching | The fp32-golden framing is rejected | Report both; argue with H2 data that bit-matching can reject more accurate kernels |
@@ -316,10 +326,10 @@ The biggest risk is doing this solo: if the harness grows into its own project, 
 
 **Open questions**
 
-- [x] Instance: trn2.3xlarge in sa-east-1b. It has 1 chip, 4 logical cores at LNC=2, 12 vCPUs and 124 GiB RAM, and runs on a Capacity Block ending Nov 13 at 6:30 AM ET.
+- [x] Instance: trn2.3xlarge in sa-east-1b. It has 1 chip, 4 logical cores at LNC=2, 12 vCPUs and 124 GiB RAM, and runs on a Capacity Block ending Friday Nov 13 at 6:30 AM ET; image Thursday night.
 - [x] SDK: 2.29, in `~/venv-neuron-229`, with nkilib fork `2.29_release`.
 - [x] Code: `KevGomes1403/nki-moe-megakernel`, forked to Kevin's GitHub. Work is on branch `phase0/trn2-setup`.
 - [x] Claude Code runs unattended on the instance inside tmux.
 - [x] Credits: not a binding constraint (Kevin, Nov 10).
 - [ ] Does Zhiru accept the fp32-golden correctness definition?
-- [ ] Will Gomes push submodule commit `72ab554`?
+- [ ] (Moot: branch no longer uses it) Will Gomes push submodule commit `72ab554`?

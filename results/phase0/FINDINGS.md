@@ -595,3 +595,20 @@ What it shows:
 - **Measured:** the day-1 gross errors were specific to the day-1 validation processes, not a deterministic function of the input context. The NKI builds are not bit-reproducible across processes; XLA is.
 - **Hypothesis (two candidates, tested next):** (a) state left by the day-1 `validate.py` call sequence (it runs `logit_validation` — dozens of generate calls of varying length per prompt — before the next prompt's first pass), or (b) the day-1 processes loaded **pre-sharded** weights written at compile time, whereas today's shard on load.
 - Consequence for T2: the bisect targets (p01@15, p06@4, p07@45, census gross) do not fail in a fresh process, so a per-layer bisect against golden needs the failure to be reproduced first (replay, below).
+
+## 2026-11-12 — Day 3, T1 follow-up: replaying the day-1 validation sequence
+
+```bash
+PRESHARD=0 bash ~/runs/run_replay.sh replay_libmoe_onload libmoe ~/qwen-30b-a3b/traced_xlamoe_trn2_229_s768_greedy ~/runs/replay/libmoe_onload
+# replay_validate.py = validate.py writing to OUT_DIR; weights shard on load (day 1 used pre-sharded weights)
+```
+
+| Library MoE, first free-running pass per prompt | Result |
+|---|---|
+| Replay vs day-1 `actual_libmoe_pNN.pt` | **20/20 prompts bit-identical, 128/128 positions each**, including all 7 gross first divergences |
+| Replay first divergences | identical to day 1 (p00@31, p01@15, p02@111, p03@27, p04 none, p05@112, p06@4, …) |
+
+What it shows:
+- **Measured:** the gross errors are deterministic and reproduce exactly when the same sequence of `generate()` calls is run in a fresh process. Pre-sharded vs shard-on-load weights is not the cause (the replay sharded on load), so the planned pre-shard replay (R2) was dropped.
+- **Measured (with T1):** the same positions are golden-correct when each prompt is preceded only by one teacher-forced pass of the previous prompt (census). So the output of a decode step depends on what earlier generate calls in the process did, not only on the current prompt's tokens. XLA shows no such dependence (bit-identical across both histories).
+- **Hypothesis:** the NKI MoE TKG kernel (common to both NKI builds) reads device memory that a previous execution wrote — e.g. a scratch/`shared_hbm` buffer or a cache region that is read before being written for some routing patterns — so stale contents leak into later steps. `history_probe.py` narrows which prior call is responsible.

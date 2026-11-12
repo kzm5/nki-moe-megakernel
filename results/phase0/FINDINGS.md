@@ -678,3 +678,33 @@ What it shows:
 - **Measured:** at two of three jumps the router recomputed from lib MoE's own MoE input selects a different 8-expert set than golden (one swap); at the third the golden router margin is the smallest in the sample (8e-5). Positions with the largest final KL (p00@6, p15@86, p17@41) have router-set differences in 8–16 layers for lib MoE; the cleanest (p06@4, p07@45) have none.
 - **Hypothesis (H2.1 supported):** these are expert swaps at near-tie router margins — the dominant mechanism of lib MoE's larger single-layer departures — not a kernel defect; the p01@15 L7 case suggests the kernel's own (lower-precision) routing flips where an fp64 recompute does not. Not tested: the kernel's internal router logits (not exposed by module capture).
 - **Not run:** megakernel per-layer capture (its 48 layers are one NKI kernel; module-level capture has no per-layer modules to hook). The standalone-kernel fallback (step 4) was not needed.
+
+## 2026-11-12 — Day 3, T3: profile of config D (lib MoE + NxDI NKI attention), seq 768
+
+```bash
+bash ~/runs/prof/run_prof.sh prof_cfgD_s768 cfgD ~/qwen-30b-a3b/traced_cfgD_trn2_229_s768_greedy 768   # profile_decode.py (cfgD kind), NEFFs dumped in-process
+python tools/profile_table.py ~/runs/prof/tables/cfgD_s768.json cfgD_s768_b128=…bucket0.neff:… cfgD_s768_b768=…bucket3.neff:…
+neuron-profile view … --output-format json   # least-skewed rank, bucket 128, DMA time by source file
+```
+Same method as day-2 Task 1 (inspect `model` mode, TKG calls 6 and 758, least-skewed rank; 970 MB raw, deleted after extraction).
+
+| µs per layer (bucket 128 / 768) | Config D | Lib MoE (day 2) | Δ |
+|---|---|---|---|
+| Wall | 219.2 / 230.4 | 193.5 / 203.6 | **+25.7 / +26.8** |
+| Sync engine | 59.3 / 59.1 | 60.2 / 60.1 | −0.9 / −1.0 |
+| DMA active | 146.0 / 151.3 | 126.1 / 128.3 | **+19.9 / +23.0** |
+| Tensor engine | 66.2 / 65.6 | 62.5 / 62.8 | +3.7 / +2.8 |
+| Vector / Scalar / GpSimd | 52.8 / 36.2 / 60.6 (b128) | 45.5 / 55.3 / 61.3 | +7.3 / −19.1 / −0.7 |
+| CC ops | 20.7 / 20.7 | 19.2 / 20.0 | +1.5 / +0.7 |
+| DMA packets / avg bytes | 41,125 / 802 | 42,261 / 790 | −3% / +2% |
+| Spill reload / save (bytes per graph) | 470,912 / 233,480 (b768: 556,928) | 212,864 / 122,888 | **2.2–2.6× / 1.9×** |
+| Graph time (ms) | 10.52 / 11.06 | 9.29 / 9.77 | +1.23 / +1.29 |
+
+DMA time by source (config D, bucket 128, µs/layer and MB/layer): MoE gate/up 40.0 / 12.6, MoE down 20.5 / 6.3, **NKI output projection (`output_projection_tkg.py`) 10.2 / 4.19**, untagged 7.2 / 3.2, **NKI attention block (`attention_block_tkg.py`) 5.8**, router 1.6 / 1.0, **NKI QKV (`qkv_tkg.py`) 1.3 / 5.24**.
+
+What it shows:
+- **Measured:** config D's extra device time is ~26 µs/layer (1.2–1.3 ms per step), mostly DMA-active time (+20–23 µs/layer); spills double; scalar-engine time drops 19 µs/layer (the kernel replaces XLA's softmax/RoPE work). The context slope is the same as lib MoE's in-graph (+11 µs/layer from bucket 128 to 768).
+- **Measured:** the attention kernels' own DMA sources total ~17 µs/layer (output projection 10.2 µs for its 4.19 MB of weights ≈ 410 GB/s, attention block 5.8, QKV 1.3).
+- **Measured:** device graph time explains ~1.2 ms of config D's 1.75 ms benchmark gap at 768; Hypothesis: the remaining ~0.5 ms/step is host-side work in this path (also visible as config D's +7 s E2E).
+- **Hypothesis:** the NxDI attention-block TKG kernel's weight loads (o_proj in particular) are not overlapped with compute on trn2 and its working set spills; XLA attention schedules the same weight traffic under other work. A per-source comparison with lib MoE was not possible (its raw profile was deleted on day 2).
+- Not reconciled: the benchmark found config D flat from 768 to 2048 while this in-graph profile grows +11 µs/layer from bucket 128 to 768 (n=1 step per bucket).

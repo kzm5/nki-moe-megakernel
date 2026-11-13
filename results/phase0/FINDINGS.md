@@ -709,3 +709,55 @@ What it shows:
 - **Measured:** device graph time explains ~1.2 ms of config D's 1.75 ms benchmark gap at 768; Hypothesis: the remaining ~0.5 ms/step is host-side work in this path (also visible as config D's +7 s E2E).
 - **Hypothesis:** the NxDI attention-block TKG kernel's weight loads (o_proj in particular) are not overlapped with compute on trn2 and its working set spills; XLA attention schedules the same weight traffic under other work. A per-source comparison with lib MoE was not possible (its raw profile was deleted on day 2).
 - Not reconciled: the benchmark found config D flat from 768 to 2048 while this in-graph profile grows +11 µs/layer from bucket 128 to 768 (n=1 step per bucket).
+
+## 2026-11-12/13 — Day 3b, Task R: router decisions vs fp32 golden at every position
+
+```bash
+# capture builds: return_router_logits (+ return_expert_index for XLA); MoE.forward wrapped at runtime to register
+# router outputs as manual capture tensors; mlp output module-captured; TensorRegistry.clear patched in-process
+bash ~/runs/run_py.sh rcap_libmoe2 tools/capture_router.py libmoe ~/qwen-30b-a3b/traced_xlamoe_trn2_229_s768_router2 ~/runs/router/libmoe2
+bash ~/runs/run_py.sh rcap_xla     tools/capture_router.py xla    ~/qwen-30b-a3b/traced_xla_trn2_229_s768_router     ~/runs/router/xla
+python tools/golden_fp32.py --dtype fp32 --inputs "$HOME/runs/val/expected_p*.pt" "$HOME/runs/val_long/expected_p*.pt" \
+  --out ~/runs/router/golden --dump 0:all,…,23:all --dump-keys moe_out              # golden MoE outputs at every generated position
+python tools/router_census.py --builds libmoe=$HOME/runs/router/libmoe2 xla=$HOME/runs/router/xla   # -> ~/runs/router/router_census.json
+```
+
+### Capture coverage — Measured
+| Build | Attempt | Valid positions (prefill / bucket 128 / 256 / 768) | Note |
+|---|---|---|---|
+| lib MoE `…_router` | 1 (no patch) | 20/24 / 2,336/2,336 / 0/204 / 0/252 | same limit as day-3 T2 |
+| XLA `…_router` | 1 (patched) | 24/24 / 2,336 / 204 / 252 | all buckets |
+| lib MoE `…_router2` | 2 (patched) | 24/24 / 2,336 / 204 / 252 | all buckets |
+- **Cause of the day-3 bucket limit (Measured, source):** `model_base._get_captured_tensors` ends with `registry.clear()`, and `TensorRegistry.clear()` replaces the config with `CapturedModelInfo([], 10, False)`; every bucket traced after the first then has no modules to capture and returns NxD's `(1,)` fallbacks. Patching `clear()` in-process to keep the config (tensors only reset) fixes all buckets; no library file was edited.
+- Capture builds' outputs are bit-identical to the non-capture teacher-forced runs on 24/24 prompts (both builds): capture does not change numerics.
+- The fused NKI MoE path returns the kernel's router logits but no expert indices (NxD returns an empty placeholder). Returned router logits are bf16-rounded in both builds: XLA's `topk(returned logits)` equals its actual `expert_index` at only 128,830/135,168 layer-positions (95.3%), while its `expert_index` is a valid tie-broken top-8 of the returned logits at **135,168/135,168**. Flips are therefore counted **tie-tolerantly** (golden's top-8 not a valid top-8 of the build's returned logits); stricter variants are shown for reference.
+
+### Flip rates, 2,816 positions × 48 layers — Measured
+| % of layer-positions with top-8 set ≠ golden | Library MoE | XLA |
+|---|---|---|
+| **Tie-tolerant** (like-for-like) | **8.40** | **9.60** |
+| Strict: lib MoE topk(logits) / XLA actual expert_index | 12.70 | 13.82 |
+| Positions with ≥ 1 flipped layer (tie-tolerant) | 79.5 | 83.8 |
+| Per-layer flip rate: L0 / max (layer) / mean | 1.07 / 13.3 (L34) / 8.40 | 1.07 / 14.7 (L35) / 9.60 |
+
+**NKI − XLA (tie-tolerant): −1.21 pp overall; per layer −2.70 to 0.00 pp (no layer above 0 pp) → passes the spec's 0.5 pp router gate at every layer.** Against XLA's actual ids: −5.42 pp.
+
+| Golden 8th−9th router-logit gap | Library MoE | XLA |
+|---|---|---|
+| Median at flips / over all layer-positions | 0.0162 / 0.0600 | 0.0164 / 0.0600 |
+| AUC of (−gap) as flip predictor (tie-tolerant; strict) | 0.780; 0.829 | 0.786; 0.829 |
+| Flip rate by gap decile, smallest → largest (%) | 27.9, 18.0, 11.9, 8.5, 6.1, 3.9, 2.8, 2.2, 1.5, 1.2 | 31.3, 20.8, 14.4, 10.3, 6.7, 4.7, 2.9, 2.3, 1.4, 1.2 |
+
+| Share of MoE-output squared error (vs golden) carried by flipped layer-positions | Library MoE | XLA |
+|---|---|---|
+| Overall | **86.6%** (flipped = 8.4% of layer-positions) | **87.7%** (9.6%) |
+| Per layer: median / min (layer) | 0.85 / 0.21 (L33) | 0.82 / 0.28 (L33) |
+
+**Worst-KL position:** p00@6 (KL(golden‖lib MoE) 0.565, KL(golden‖XLA) 0.231 — the only position where both exceed 0.2), absolute position 12, TKG bucket 128. Tie-tolerant flips: lib MoE in 11 layers (17–21, 23, 36, 37, 42, 44, 46), XLA in 5 (17, 36, 39, 42, 44); golden's smallest router gap there is 0.0014 (layer 1).
+
+What it shows:
+- **Measured:** the library MoE kernel's routing agrees with fp32 golden *more* often than XLA's does (8.4% vs 9.6% of layer-positions; fewer flips at every layer) — it passes the 0.5 pp router gate with margin.
+- **Measured:** router flips are where nearly all MoE error lives (≈87% of squared MoE-output error in ≈9% of layer-positions, both builds), and golden's router margin predicts them (flip rate 28–31% in the smallest-gap decile vs 1.2% in the largest). H2.1 holds for both builds alike.
+- **Measured:** ~4 pp of XLA's own flips are tie-breaks between exactly equal bf16 router logits; XLA's router decision is effectively made on bf16 logits.
+- **Hypothesis:** the worst-KL position is a router-flip cascade at a low-margin position (lib MoE flips in 11 layers vs XLA's 5 there), not a systematic defect — consistent with lib MoE's lower flip rate overall.
+- Caveat: lib MoE's flips are inferred from its returned (bf16) router logits, not from the kernel's internal indices, which NxD does not expose; the tie-tolerant count is a lower bound and the strict count an upper bound for both builds.

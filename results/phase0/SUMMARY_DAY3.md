@@ -67,3 +67,19 @@ Config D profile (lib MoE + NxDI NKI attention, seq 768, µs/layer, bucket 128 /
 1. **Router-precision study (H2.1, Phase 2):** capture the NKI MoE kernel's own router logits/expert indices (manual tensor registration inside the kernel wrapper or `return_expert_index` on a custom wrapper) at the 7 targets plus all positions with KL > 0.05, and measure flip rate vs golden router margin for lib MoE and XLA; test whether fp32 router logits in the kernel remove the L7-type departures.
 2. **Fix the validation gate (Phase 1):** replace argmax-based divergence with teacher-forced per-position KL/ρ (this harness) and an explicit tie rule; rerun on a larger, hashed corpus with long prompts in TKG buckets > 128 (and fix capture there) to get a statistically meaningful max-KL tail for both NKI builds.
 3. **Attention kernel on trn2:** with the context-scaling gain attributed to NKI attention and config D's NxDI kernel 1.2 ms/step slower in-graph (DMA + spills, o_proj weight load not overlapped — Hypothesis), profile the megakernel's attention subkernel against `attention_block_tkg` at the same shapes to see what a tuned unfused NKI attention would recover — this decides whether Phase 4's fusion sweep is worth running on trn2.
+
+## Day 3b — router decisions vs golden (Task R, 2026-11-12 19:40 → 22:45 ET)
+
+| % of layer-positions (2,816 positions × 48 layers) with top-8 ≠ fp32 golden | Library MoE | XLA |
+|---|---|---|
+| Tie-tolerant (like-for-like; returned router values are bf16) | **8.40** | **9.60** |
+| Strict (lib MoE topk of returned values / XLA actual expert ids) | 12.70 | 13.82 |
+| **NKI − XLA** | **−1.21 pp overall; −2.70 … 0.00 pp per layer → passes the 0.5 pp gate at all 48 layers** | |
+| Share of MoE-output squared error on flipped layer-positions | 86.6% | 87.7% |
+| Golden-margin AUC for predicting flips; flip rate smallest → largest gap decile | 0.78; 27.9% → 1.2% | 0.79; 31.3% → 1.2% |
+| Worst-KL position p00@6 (lib MoE KL 0.565, XLA 0.231; bucket 128) | flips in 11 layers | flips in 5 layers |
+
+Coverage: all decode buckets (128, 256, 768) and every prefill, after patching NxDI's `TensorRegistry.clear()` in-process (it reset the capture config after the first bucket's trace — the cause of day 3's bucket-128-only capture). Capture builds are bit-identical to non-capture builds on 24/24 prompts. XLA's expert ids are valid top-8s of its returned values at 135,168/135,168 layer-positions (method check); the fused kernel returns no ids, so lib MoE flips are inferred from its returned values.
+
+Findings: (1) the library MoE kernel's routing matches fp32 golden more often than XLA's (Measured); (2) router flips at small golden margins carry ~87% of MoE error in both builds — H2.1 holds equally for both (Measured); (3) ~4 pp of XLA's flips are exact bf16 ties (Measured).
+Failed: lib MoE capture attempt 1 covered only prefill + bucket 128 (fixed in attempt 2). Next: expose the kernel's internal indices (or fp32 router values) to replace the inferred-ids bounds; test fp32 router logits in the kernel at the high-flip layers (L21–36).

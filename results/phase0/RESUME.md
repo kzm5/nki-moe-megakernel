@@ -1,6 +1,6 @@
 # Resuming Phase 0 on a fresh instance from this image
 
-State as of 2026-11-12 ~04:30 ET. Branch `phase0/trn2-setup` on remote `mine` (`https://github.com/kzm5/nki-moe-megakernel.git`). Read first: `.claude/CLAUDE.md` (Session rules), `docs/RESEARCH_PLAN.md`, `results/phase0/SUMMARY_DAY3.md`, `FINDINGS.md` (latest "Day 3" sections), `ledger.jsonl`.
+State as of 2026-11-12 ~22:45 ET (Day 3b done). Branch `phase0/trn2-setup` on remote `mine` (`https://github.com/kzm5/nki-moe-megakernel.git`). Read first: `.claude/CLAUDE.md` (Session rules), `docs/RESEARCH_PLAN.md`, `results/phase0/SUMMARY_DAY3.md`, `FINDINGS.md` (latest "Day 3" sections), `ledger.jsonl`.
 
 ## Software
 | Item | Version / location |
@@ -21,6 +21,8 @@ State as of 2026-11-12 ~04:30 ET. Branch `phase0/trn2-setup` on remote `mine` (`
 | `~/qwen-30b-a3b/traced_nki_trn2_229_s768_greedy` | 1.7 GB | **yes** | megakernel build |
 | `~/qwen-30b-a3b/traced_{xla,xlamoe}_trn2_229_s768_capture` | 1.7 GB each | for T2 reruns | tensor-capture builds (per-layer input_layernorm / o_proj / mlp in+out) |
 | `~/qwen-30b-a3b/traced_cfgD_trn2_229_s{768,2048}_greedy` | 1.7 / 2.2 GB | optional | config D (lib MoE + NxDI NKI attention) |
+| `~/qwen-30b-a3b/traced_xlamoe_trn2_229_s768_router2`, `traced_xla_trn2_229_s768_router` | ~1.7 GB each | for Task R reruns | router-capture builds (router values [+ XLA expert ids] + mlp outputs, all buckets); `traced_xlamoe_…_router` = attempt 1, bucket 128 only |
+| `~/runs/router` | 11 GB | yes | Task R captures (`libmoe2`, `xla`, attempt-1 `libmoe`), golden MoE outputs at all positions (`golden/dump_pNN.pt`), `router_census.json` |
 | `~/qwen-30b-a3b/traced_{libmoe,nki}_trn2_229_s{256,512,1024,2048,4096}_greedy_sweep` | 0.8–2.7 GB each | optional | seq-len sweep builds |
 | other `traced_*` (non-greedy day-1, `traced_nki_trn2*`) | ≤1.7 GB | no | superseded |
 | Pre-sharded `weights/` | **none** | – | all deleted after the noise floor; every load shards on load |
@@ -58,7 +60,15 @@ bash ~/runs/run_py.sh cap_libmoe tools/capture_layers.py libmoe ~/qwen-30b-a3b/t
 bash ~/runs/run_py.sh cap_xla tools/capture_layers.py xla ~/qwen-30b-a3b/traced_xla_trn2_229_s768_capture ~/runs/bisect/xla --targets NN:P,…
 python tools/bisect_compare.py --builds libmoe=$HOME/runs/bisect/libmoe xla=$HOME/runs/bisect/xla
 ```
-New targets must be in TKG bucket 128 (absolute position < 128) — capture returned fallback tensors in bucket 768.
+`capture_layers.py` (day 3) captures only prefill + TKG bucket 128: NxDI's `registry.clear()` resets the capture config after the first bucket's trace. `capture_router.py` patches `TensorRegistry.clear` in-process and captures every bucket — port that patch before reusing `capture_layers.py` beyond bucket 128.
+
+**Rerun the router census (Task R):**
+```bash
+bash ~/runs/run_py.sh rcap_libmoe2 tools/capture_router.py libmoe ~/qwen-30b-a3b/traced_xlamoe_trn2_229_s768_router2 ~/runs/router/libmoe2
+bash ~/runs/run_py.sh rcap_xla tools/capture_router.py xla ~/qwen-30b-a3b/traced_xla_trn2_229_s768_router ~/runs/router/xla
+python tools/router_census.py --builds libmoe=$HOME/runs/router/libmoe2 xla=$HOME/runs/router/xla
+```
+A process's log shows `JOB_DONE` well before it exits (teardown takes 10+ min): check `ps` before starting the next device job.
 
 ## Gotchas
 - `--do-sample ""` (empty string) is the only way to get greedy: `main.py`'s `--do-sample` is `type=bool`; `--top-k 1` alone samples.

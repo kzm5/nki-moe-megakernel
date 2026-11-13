@@ -1,17 +1,17 @@
 # Day-3 queue state (source of truth; see QUEUE_DAY3.md for the queue)
 
-Updated: 2026-11-12 19:45 ET (00:45 UTC Fri). Day-3 queue done. **Day-3b queue (`QUEUE_DAY3B.md`) in progress.** Deadlines ET: no compile after 02:30, no device job after 04:30, pushed and idle by 05:00. Never touch `docs/RESEARCH_PLAN.md` or `~/runs_backup.tar.zst`; `git pull --rebase mine phase0/trn2-setup` before every push.
+Updated: 2026-11-12 22:35 ET (03:35 UTC Fri). Day-3 and Day-3b queues **done**; machine idle. Never touch `docs/RESEARCH_PLAN.md` or `~/runs_backup.tar.zst`; `git pull --rebase mine phase0/trn2-setup` before every push.
 
 ## Day-3b tasks
 | Task | Status | Commands / paths | Next step |
 |---|---|---|---|
-| R1 lib MoE router-capture build | **done** 20:29 ET (attempt 1 compiled; valid only in prefill + TKG bucket 128: 2,356/2,816 positions) | `run_py.sh rcap_libmoe tools/capture_router.py libmoe ~/qwen-30b-a3b/traced_xlamoe_trn2_229_s768_router ~/runs/router/libmoe` | rebuild with the all-bucket patch if XLA confirms it works (new dir `…_router2`) |
-| Cause of bucket fallbacks | **found** (Measured, source): NxDI `model_base._get_captured_tensors` calls `registry.clear()`, which resets the capture config, so buckets traced after the first see no modules / max_tensors=10 | `capture_router.py` now patches `TensorRegistry.clear` in-process to keep the config | – |
-| R1b XLA router-capture build | **compiling** 20:43 ET with the patch (log `~/runs/rcap_xla.log`) | `run_py.sh rcap_xla tools/capture_router.py xla ~/qwen-30b-a3b/traced_xla_trn2_229_s768_router ~/runs/router/xla` | check validity in buckets 256/768 |
-| R1c golden MoE outputs at all generated positions | **done** 20:43 ET | `run_cpu.sh golden_moe_all golden_fp32.py … --out ~/runs/router/golden --dump 0:all,…,23:all --dump-keys moe_out` (2.7 GB) | – |
-| Prelim (lib MoE only, bucket 128) | flips 12.3% of layer-positions; flipped carry 86% of MoE sq. error; gap AUC 0.83 | `router_census.py --builds libmoe=…` | needs XLA for the pp gate |
-| R2/R3 analysis | pending | `tools/router_census.py` | after both builds |
-| Wrap-up | pending | SUMMARY_DAY3 "Day 3b", RESUME, this file | by 05:00 ET |
+| R1 lib MoE router-capture, attempt 1 | done 20:29 ET; valid only prefill + bucket 128 (2,356/2,816) | `run_py.sh rcap_libmoe tools/capture_router.py libmoe ~/qwen-30b-a3b/traced_xlamoe_trn2_229_s768_router ~/runs/router/libmoe` | superseded by attempt 2 |
+| Cause of bucket fallbacks | found (Measured, source): `registry.clear()` resets the capture config after the first bucket trace; `capture_router.py` patches `TensorRegistry.clear` in-process | – | – |
+| R1b XLA router-capture (patched) | done 21:20 ET; valid at all 2,816 positions | `run_py.sh rcap_xla tools/capture_router.py xla ~/qwen-30b-a3b/traced_xla_trn2_229_s768_router ~/runs/router/xla` | – |
+| R1 lib MoE router-capture, attempt 2 (patched) | done 22:28 ET; valid at all 2,816 positions | `run_py.sh rcap_libmoe2 tools/capture_router.py libmoe ~/qwen-30b-a3b/traced_xlamoe_trn2_229_s768_router2 ~/runs/router/libmoe2` | – |
+| R1c golden MoE outputs, all positions | done 20:43 ET | `golden_fp32.py … --out ~/runs/router/golden --dump 0:all,…,23:all --dump-keys moe_out` | – |
+| R2/R3 analysis | done 22:35 ET: tie-tolerant flips lib MoE 8.40% vs XLA 9.60% → **−1.21 pp**, no layer above 0 pp (gate 0.5 pp); flipped carry 86.6% / 87.7% of MoE error; gap AUC 0.78 | `router_census.py --builds libmoe=$HOME/runs/router/libmoe2 xla=$HOME/runs/router/xla` → `~/runs/router/router_census.json` | – |
+| Wrap-up | done 22:40 ET: FINDINGS "Day 3b", SUMMARY_DAY3 "Day 3b", RESUME | – | idle |
 
 ## Environment
 - Worktree: `~/nki-moe-megakernel/.claude/worktrees/session-rules` (branch `worktree-session-rules`), push with `git push mine HEAD:phase0/trn2-setup`.

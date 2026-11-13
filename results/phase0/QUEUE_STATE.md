@@ -1,6 +1,15 @@
 # Day-3 queue state (source of truth; see QUEUE_DAY3.md for the queue)
 
-Updated: 2026-11-12 04:15 ET (09:15 UTC). All queue tasks done; machine idle.
+Updated: 2026-11-12 19:45 ET (00:45 UTC Fri). Day-3 queue done. **Day-3b queue (`QUEUE_DAY3B.md`) in progress.** Deadlines ET: no compile after 02:30, no device job after 04:30, pushed and idle by 05:00. Never touch `docs/RESEARCH_PLAN.md` or `~/runs_backup.tar.zst`; `git pull --rebase mine phase0/trn2-setup` before every push.
+
+## Day-3b tasks
+| Task | Status | Commands / paths | Next step |
+|---|---|---|---|
+| R1 lib MoE router-capture build | **compiling** 19:41 ET (attempt 1; log `~/runs/rcap_libmoe.log`) | `run_py.sh rcap_libmoe tools/capture_router.py libmoe ~/qwen-30b-a3b/traced_xlamoe_trn2_229_s768_router ~/runs/router/libmoe` (return_router_logits; MoE.forward wrapped to register router logits as manual tensors; mlp output module-captured) | check per-bucket validity (`valid` per prompt) |
+| R1b XLA router-capture build | pending | same with `xla` → `~/qwen-30b-a3b/traced_xla_trn2_229_s768_router`, `~/runs/router/xla` (also expert_index) | after R1 |
+| R1c golden MoE outputs at all generated positions | pending | `golden_fp32.py --dump NN:all --dump-keys moe_out` | between device jobs |
+| R2/R3 analysis | pending | `tools/router_census.py` | after both builds |
+| Wrap-up | pending | SUMMARY_DAY3 "Day 3b", RESUME, this file | by 05:00 ET |
 
 ## Environment
 - Worktree: `~/nki-moe-megakernel/.claude/worktrees/session-rules` (branch `worktree-session-rules`), push with `git push mine HEAD:phase0/trn2-setup`.

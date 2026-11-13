@@ -44,7 +44,20 @@ def patch_moe(with_index):
     moe_model.MoE.forward = forward
 
 
-def load(kind, cdir):
+def keep_capture_config_on_clear():
+    """NxDI clears the registry after building each trace's capture outputs, which also resets its config,
+    so every bucket traced after the first returns fallback tensors. Keep the config; drop only tensors."""
+    from neuronx_distributed.utils.tensor_capture.registry import CapturedModelInfo, TensorRegistry
+
+    def clear(self):
+        mi = self.model_info
+        new = CapturedModelInfo(mi.modules_to_capture, mi.max_tensors, mi.capture_inputs)
+        new.hooks = mi.hooks
+        self.model_info = new
+    TensorRegistry.clear = clear
+
+
+def load(kind, cdir, all_buckets=True):
     extra, mod = C.KINDS[kind]
     flags = ["--seq-len", "768", "--on-device-sampling", "--top-k", "1", "--do-sample", "", "--output-logits"]
     if os.path.exists(f"{cdir}/model.pt"):
@@ -60,6 +73,8 @@ def load(kind, cdir):
     args.tensor_capture_config = {"modules_to_capture": MODULES,
                                   "max_intermediate_tensors": N_LAYERS * (2 if with_index else 1)}
     patch_moe(with_index)
+    if all_buckets:
+        keep_capture_config_on_clear()
     cls = getattr(importlib.import_module(mod), "NeuronQwen3MoeForCausalLM")
     t0 = time.time()
     model, tok, gen_cfg = C.M.prepare_inference(cls, args)

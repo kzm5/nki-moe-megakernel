@@ -5,9 +5,11 @@ Updated: 2026-11-12 19:45 ET (00:45 UTC Fri). Day-3 queue done. **Day-3b queue (
 ## Day-3b tasks
 | Task | Status | Commands / paths | Next step |
 |---|---|---|---|
-| R1 lib MoE router-capture build | **compiling** 19:41 ET (attempt 1; log `~/runs/rcap_libmoe.log`) | `run_py.sh rcap_libmoe tools/capture_router.py libmoe ~/qwen-30b-a3b/traced_xlamoe_trn2_229_s768_router ~/runs/router/libmoe` (return_router_logits; MoE.forward wrapped to register router logits as manual tensors; mlp output module-captured) | check per-bucket validity (`valid` per prompt) |
-| R1b XLA router-capture build | pending | same with `xla` → `~/qwen-30b-a3b/traced_xla_trn2_229_s768_router`, `~/runs/router/xla` (also expert_index) | after R1 |
-| R1c golden MoE outputs at all generated positions | pending | `golden_fp32.py --dump NN:all --dump-keys moe_out` | between device jobs |
+| R1 lib MoE router-capture build | **done** 20:29 ET (attempt 1 compiled; valid only in prefill + TKG bucket 128: 2,356/2,816 positions) | `run_py.sh rcap_libmoe tools/capture_router.py libmoe ~/qwen-30b-a3b/traced_xlamoe_trn2_229_s768_router ~/runs/router/libmoe` | rebuild with the all-bucket patch if XLA confirms it works (new dir `…_router2`) |
+| Cause of bucket fallbacks | **found** (Measured, source): NxDI `model_base._get_captured_tensors` calls `registry.clear()`, which resets the capture config, so buckets traced after the first see no modules / max_tensors=10 | `capture_router.py` now patches `TensorRegistry.clear` in-process to keep the config | – |
+| R1b XLA router-capture build | **compiling** 20:43 ET with the patch (log `~/runs/rcap_xla.log`) | `run_py.sh rcap_xla tools/capture_router.py xla ~/qwen-30b-a3b/traced_xla_trn2_229_s768_router ~/runs/router/xla` | check validity in buckets 256/768 |
+| R1c golden MoE outputs at all generated positions | **done** 20:43 ET | `run_cpu.sh golden_moe_all golden_fp32.py … --out ~/runs/router/golden --dump 0:all,…,23:all --dump-keys moe_out` (2.7 GB) | – |
+| Prelim (lib MoE only, bucket 128) | flips 12.3% of layer-positions; flipped carry 86% of MoE sq. error; gap AUC 0.83 | `router_census.py --builds libmoe=…` | needs XLA for the pp gate |
 | R2/R3 analysis | pending | `tools/router_census.py` | after both builds |
 | Wrap-up | pending | SUMMARY_DAY3 "Day 3b", RESUME, this file | by 05:00 ET |
 

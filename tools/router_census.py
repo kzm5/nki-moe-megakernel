@@ -6,8 +6,11 @@ Computes (per build, per layer L, per position p; golden row = plen - 1 + p):
     golden 8th-9th router-logit gap at every flip; rank AUC of (-gap) as a flip predictor; flip rate by gap decile
     share of each layer's MoE-output squared error (vs golden) carried by flipped positions
     validity per TKG bucket (capture fallbacks excluded)
-Expert sets: XLA uses its returned expert_index; library MoE uses topk(returned router logits, 8) (the fused
-kernel returns no indices). XLA's topk(logits) vs its expert_index is reported as a check of that method.
+Flip definitions (returned router logits are bf16-rounded, so topk on them breaks ties arbitrarily):
+    <build>       tie-tolerant: flip only if golden's top-8 is not a valid top-8 of the returned logits
+    xla_ids       XLA's returned expert_index != golden top-8
+    libmoe_topk   topk(returned logits, 8) != golden top-8 (the fused kernel returns no indices)
+Checks: XLA topk(logits) == expert_index, and expert_index is a valid top-8 of its logits (expect 100%).
 
 Usage:
     router_census.py --builds libmoe=~/runs/router/libmoe xla=~/runs/router/xla [--moe-golden ~/runs/router/golden]
@@ -22,6 +25,13 @@ N_LAYERS = 48
 
 def bucket(pos):
     return next(b for b in BUCKETS if pos < b)
+
+
+def valid_top8(logits, ids):
+    """True if the set `ids` is a valid top-8 of `logits` with ties broken either way."""
+    m = torch.zeros(logits.numel(), dtype=torch.bool)
+    m[ids.long()] = True
+    return bool(logits[m].min() >= logits[~m].max())
 
 
 def auc(score, label):
@@ -50,7 +60,7 @@ def main():
     a = ap.parse_args()
     builds = dict(b.split("=", 1) for b in a.builds)
     rows = {b: [] for b in builds}  # per (prompt, pos): flips [48], valid, gap [48], err [48], err_flip...
-    check = {"xla_topk_logits_eq_index": [0, 0]}
+    check = {"xla_topk_logits_eq_index": [0, 0], "xla_index_valid_top8_of_logits": [0, 0]}
     per_bucket = {b: {} for b in builds}
     files = sorted(glob.glob(f"{next(iter(builds.values()))}/router_p*.pt"))
     for rf in files:
@@ -74,22 +84,27 @@ def main():
                 row = plen - 1 + p
                 gset = gi[:, row, :8]
                 gap = gt[:, row, 7] - gt[:, row, 8]
+                lg = c["router_logits"][p]
+                tt = torch.tensor([not valid_top8(lg[L], gset[L]) for L in range(N_LAYERS)])  # tie-tolerant flip
+                err = ((c["moe_out"][p] - gmoe[:, p]).pow(2).sum(-1)) if gmoe is not None else None
+                base = {"prompt": nn, "pos": p, "gap": gap, "err": err}
                 if c["expert_index"] is not None:
-                    ids = c["expert_index"][p]
-                    tk = c["router_logits"][p].topk(8).indices
+                    ids, tk = c["expert_index"][p], lg.topk(8).indices
                     for L in range(N_LAYERS):
                         check["xla_topk_logits_eq_index"][1] += 1
                         check["xla_topk_logits_eq_index"][0] += int(set(tk[L].tolist()) == set(ids[L].tolist()))
+                        check["xla_index_valid_top8_of_logits"][1] += 1
+                        check["xla_index_valid_top8_of_logits"][0] += int(valid_top8(lg[L], ids[L]))
+                    rows.setdefault(f"{b}_ids", []).append({**base, "flips": torch.tensor(
+                        [set(ids[L].tolist()) != set(gset[L].tolist()) for L in range(N_LAYERS)])})
                 else:
-                    ids = c["router_logits"][p].topk(8).indices
-                flips = torch.tensor([set(ids[L].tolist()) != set(gset[L].tolist()) for L in range(N_LAYERS)])
-                n_missing = torch.tensor([8 - len(set(ids[L].tolist()) & set(gset[L].tolist())) for L in range(N_LAYERS)])
-                err = ((c["moe_out"][p] - gmoe[:, p]).pow(2).sum(-1)) if gmoe is not None else None
-                rows[b].append({"prompt": nn, "pos": p, "flips": flips, "n_missing": n_missing, "gap": gap, "err": err})
+                    rows.setdefault(f"{b}_topk", []).append({**base, "flips": torch.tensor(
+                        [set(lg[L].topk(8).indices.tolist()) != set(gset[L].tolist()) for L in range(N_LAYERS)])})
+                rows[b].append({**base, "flips": tt})
     res = {"check": {k: f"{v[0]}/{v[1]}" for k, v in check.items()}, "validity_by_bucket": per_bucket, "builds": {}}
     key = lambda r: (r["prompt"], r["pos"])
     common = set.intersection(*[set(map(key, rows[b])) for b in builds]) if len(builds) > 1 else set(map(key, rows[next(iter(builds))]))
-    for b in builds:
+    for b in rows:
         rr = [r for r in rows[b] if key(r) in common]
         if not rr:
             continue
@@ -111,13 +126,16 @@ def main():
             s["moe_err_share_flipped_overall"] = float((E * F).sum() / E.sum())
             s["flipped_fraction_of_layer_positions"] = float(F.mean())
         res["builds"][b] = s
-    if "libmoe" in res["builds"] and "xla" in res["builds"]:
-        lb, xb = res["builds"]["libmoe"], res["builds"]["xla"]
-        res["nki_minus_xla_pp"] = {"overall": lb["flip_rate_overall_pct"] - xb["flip_rate_overall_pct"],
-                                   "per_layer": [round(x - y, 3) for x, y in zip(lb["flip_rate_per_layer_pct"], xb["flip_rate_per_layer_pct"])],
-                                   "gate_pp": 0.5}
-        res["nki_minus_xla_pp"]["max_layer"] = max(range(N_LAYERS), key=lambda L: res["nki_minus_xla_pp"]["per_layer"][L])
-        res["nki_minus_xla_pp"]["layers_over_gate"] = [L for L, v in enumerate(res["nki_minus_xla_pp"]["per_layer"]) if v > 0.5]
+    for name, (nb, xbn) in {"nki_minus_xla_pp": ("libmoe", "xla"), "nki_minus_xla_ids_pp": ("libmoe", "xla_ids")}.items():
+        if nb in res["builds"] and xbn in res["builds"]:
+            lb, xb = res["builds"][nb], res["builds"][xbn]
+            d = {"compare": f"{nb} - {xbn}", "overall": lb["flip_rate_overall_pct"] - xb["flip_rate_overall_pct"],
+                 "per_layer": [round(x - y, 3) for x, y in zip(lb["flip_rate_per_layer_pct"], xb["flip_rate_per_layer_pct"])],
+                 "gate_pp": 0.5}
+            d["max_layer"] = max(range(N_LAYERS), key=lambda L: d["per_layer"][L])
+            d["max_layer_pp"] = d["per_layer"][d["max_layer"]]
+            d["layers_over_gate"] = [L for L, v in enumerate(d["per_layer"]) if v > 0.5]
+            res[name] = d
     # worst-KL position from the day-3 census
     cr = json.load(open(f"{a.census}/libmoe/census_rows.json"))
     w = max(cr, key=lambda r: r["kl"])

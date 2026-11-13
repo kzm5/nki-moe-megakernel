@@ -57,7 +57,7 @@ DUMP_KEYS = ("layer_in", "attn_out", "moe_in", "router", "moe_out", "layer_out")
 
 
 @torch.inference_mode()
-def forward_layerwise(model_path, seqs, dtype, attn_impl="sdpa", log=print, dump=None):
+def forward_layerwise(model_path, seqs, dtype, attn_impl="sdpa", log=print, dump=None, dump_keys=DUMP_KEYS):
     """seqs: list of [1, T] int64. Returns final-norm hidden states, router tops per sequence and,
     for dump = {seq_index: [rows]}, per-layer tensors at those rows ({seq_index: {key: [L, rows, ...]}})."""
     dump = dump or {}
@@ -76,7 +76,7 @@ def forward_layerwise(model_path, seqs, dtype, attn_impl="sdpa", log=print, dump
                                   cache_position=torch.arange(T), past_key_values=None, position_ids=pos)
         ctx.append((pos, mask, rope(h, pos)))
     tops = [[] for _ in seqs]
-    dumps = {j: {k: [] for k in DUMP_KEYS} for j in dump}
+    dumps = {j: {k: [] for k in dump_keys} for j in dump}
     for li in range(cfg.num_hidden_layers):
         t0 = time.time()
         layer = build(Qwen3MoeDecoderLayer, W.load(f"model.layers.{li}.", dtype), cfg, li)
@@ -94,7 +94,7 @@ def forward_layerwise(model_path, seqs, dtype, attn_impl="sdpa", log=print, dump
                 got = {"layer_in": h[0, r], "attn_out": rec["attn_out"][0, r], "moe_in": rec["moe_in"][0, r],
                        "router": rec["router"].view(h.shape[1], -1)[r], "moe_out": rec["moe_out"][0, r],
                        "layer_out": out[0, r]}
-                for k in DUMP_KEYS:
+                for k in dump_keys:
                     dumps[j][k].append(got[k].float().clone())
             hs[j] = out
         for hk in hooks:
@@ -143,7 +143,8 @@ def main():
     ap.add_argument("--all-positions", action="store_true")
     ap.add_argument("--threads", type=int, default=os.cpu_count())
     ap.add_argument("--check-hf", metavar="PROMPT")
-    ap.add_argument("--dump", default="", help="NN:P,... — per-layer tensors at prompt NN, generated position P")
+    ap.add_argument("--dump", default="", help="NN:P,... — per-layer tensors at prompt NN, generated position P (or all)")
+    ap.add_argument("--dump-keys", default=",".join(DUMP_KEYS))
     a = ap.parse_args()
     torch.set_num_threads(a.threads)
     if a.check_hf:
@@ -154,7 +155,8 @@ def main():
     want = {}
     for t in filter(None, a.dump.split(",")):
         nn, p = t.split(":")
-        want.setdefault(int(nn), []).append(int(p))
+        want.setdefault(int(nn), []).append(p if p == "all" else int(p))
+    n_news = []
     for p in sorted(sum((glob.glob(x) for x in a.inputs), [])):
         e = torch.load(p)
         plen = e["input_ids"].shape[1]
@@ -163,14 +165,17 @@ def main():
         rows.append(slice(None) if a.all_positions else slice(plen - 1, plen + n_new - 1))
         names.append(os.path.basename(p).replace("expected_", "golden_"))
         plens.append(plen)
+        n_news.append(n_new)
     dump = {}
     for j, n in enumerate(names):
         nn = int(n[len("golden_p"):-3])
         if nn in want:
+            want[nn] = list(range(n_news[j])) if "all" in want[nn] else want[nn]
             dump[j] = [plens[j] - 1 + p for p in want[nn]]  # row whose output predicts generated position p
     t0 = time.time()
     dt = DTYPES[a.dtype]
-    r = forward_layerwise(a.model_path, seqs, dt, log=lambda s: print(s, flush=True), dump=dump)
+    r = forward_layerwise(a.model_path, seqs, dt, log=lambda s: print(s, flush=True), dump=dump,
+                          dump_keys=tuple(a.dump_keys.split(",")))
     hs, tops, W = r[:3]
     for j, d in (r[3].items() if dump else []):
         nn = int(names[j][len("golden_p"):-3])

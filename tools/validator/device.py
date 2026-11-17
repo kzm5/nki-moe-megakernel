@@ -10,7 +10,7 @@ Computes (in order, each optional):
 Returns (under OUT):
     free/expected_pNN.pt   {"prompt", "input_ids", "attention_mask", "sequences", "logits" [n,1,V]}
     tf/tf_pNN.pt           {"scores" [n,V] (bf16 when lossless, else fp32), "sequences", "plen"}
-    cap/cap_pNN.pt         {"attn", "moe", "resid" [n,48,H] bf16, "router_logits" [n,48,E], "expert_index"
+    cap/cap_pNN.pt         decode steps only (valid[0] = False): {"attn", "moe", "resid" [n,48,H] bf16, "router_logits" [n,48,E], "expert_index"
                             [n,48,8] or None, "valid" [n]}
     ppl/ppl_wNN.pt         {"nll" [L-1] fp64, "argmax" [L-1]}
     device.json            build, flags, mutant, per-prompt timings, repeat result
@@ -141,17 +141,19 @@ def compact(x):
     return b if torch.equal(b.float(), x) else x
 
 
-def last_row(t, d, plen):
-    """Row of the current token: plen - 1 on the (right-padded) prefill step, else the only row."""
+def last_row(t, d):
     t = t.reshape(-1, d)
-    return t[plen - 1] if t.shape[0] > 1 else t[0]
+    assert t.shape[0] == 1, t.shape
+    return t[0]
 
 
-def unpack_captures(got, n, with_index, plen):
+def unpack_captures(got, n, with_index):
     L, M = N_LAYERS, 3 * N_LAYERS
     hid = None
     res = {"valid": torch.zeros(n, dtype=torch.bool)}
     for s, caps in enumerate(got[:n]):
+        if s == 0:
+            continue  # prefill: CTE shards some outputs by sequence across TP; boundaries are scored on decode steps
         mod, man = caps[:M], caps[M:]
         if len(mod) < M or mod[0].numel() <= 1 or not man or man[0].numel() <= 1:
             continue
@@ -165,12 +167,12 @@ def unpack_captures(got, n, with_index, plen):
         res["valid"][s] = True
         k = 2 if with_index else 1
         for i in range(L):
-            res["attn"][s, i] = last_row(mod[3 * i], hid, plen).bfloat16()
-            res["moe"][s, i] = last_row(mod[3 * i + 1], hid, plen).bfloat16()
-            res["resid"][s, i] = last_row(mod[3 * i + 2], hid, plen).bfloat16()
-            res["router_logits"][s, i] = last_row(man[k * i], E, plen).float()
+            res["attn"][s, i] = last_row(mod[3 * i], hid).bfloat16()
+            res["moe"][s, i] = last_row(mod[3 * i + 1], hid).bfloat16()
+            res["resid"][s, i] = last_row(mod[3 * i + 2], hid).bfloat16()
+            res["router_logits"][s, i] = last_row(man[k * i], E).float()
             if with_index:
-                res["expert_index"][s, i] = last_row(man[k * i + 1], 8, plen).to(torch.int16)
+                res["expert_index"][s, i] = last_row(man[k * i + 1], 8).to(torch.int16)
     for k in ("attn", "moe", "resid", "router_logits", "expert_index"):
         res.setdefault(k, None)
     return res
@@ -240,7 +242,7 @@ def main():
             if tag == "tf":
                 torch.save({"scores": sc, "sequences": seq, "plen": plen}, f"{od}/tf_p{nn}.pt")
             if a.capture and tag == "tf":
-                c = unpack_captures(f.got, n, with_index, plen)
+                c = unpack_captures(f.got, n, with_index)
                 c["plen"] = plen
                 torch.save(c, f"{a.out}/cap/cap_p{nn}.pt")
                 print(f"CAP {p['id']} valid={int(c['valid'].sum())}/{n}", flush=True)

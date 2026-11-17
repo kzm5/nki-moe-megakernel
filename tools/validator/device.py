@@ -222,7 +222,8 @@ def main():
 
     def tf_pass(tag):
         od = f"{a.out}/{tag}"
-        os.makedirs(od, exist_ok=True)
+        if tag == "tf":
+            os.makedirs(od, exist_ok=True)
         if a.capture and tag == "tf":
             os.makedirs(f"{a.out}/cap", exist_ok=True)
         hashes = {}
@@ -236,7 +237,8 @@ def main():
             assert torch.equal(seq[0, plen:], ref), "forced tokens not applied"
             sc = compact(lg[:, 0])
             hashes[p["id"]] = hashlib.sha256(sc.float().numpy().tobytes()).hexdigest()
-            torch.save({"scores": sc, "sequences": seq, "plen": plen}, f"{od}/tf_p{nn}.pt")
+            if tag == "tf":
+                torch.save({"scores": sc, "sequences": seq, "plen": plen}, f"{od}/tf_p{nn}.pt")
             if a.capture and tag == "tf":
                 c = unpack_captures(f.got, n, with_index, plen)
                 c["plen"] = plen

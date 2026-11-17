@@ -34,10 +34,16 @@ KINDS = {  # kind -> (extra main.py flags, model module)
     "E": (["--moe-fused-nki-kernel-enabled"], "megakernels.qwen3_moe.qwen_attn_e"),
 }
 WITH_INDEX = {"xla"}  # builds whose MoE returns expert indices
+HIDDEN = 2048
 
 
-def capture_modules():
-    return [m for i in range(N_LAYERS) for m in (f"layers.{i}.self_attn", f"layers.{i}.mlp", f"layers.{i}")]
+ATTN_MODULE = {"E": "self_attn.attn_out_id"}  # module whose single output is the reduced attention output
+
+
+def capture_modules(kind):
+    """One captured tensor per module (its first output); self_attn itself is not usable (tuple output)."""
+    a = ATTN_MODULE.get(kind, "self_attn.o_proj")
+    return [m for i in range(N_LAYERS) for m in (f"layers.{i}.{a}", f"layers.{i}.mlp", f"layers.{i}")]
 
 
 def patch_router_capture(with_index):
@@ -83,7 +89,7 @@ def load(kind, cdir, capture, mutant, seq_len):
     with_index = kind in WITH_INDEX
     if capture:
         args.return_router_logits, args.return_expert_index = True, with_index
-        args.tensor_capture_config = {"modules_to_capture": capture_modules(),
+        args.tensor_capture_config = {"modules_to_capture": capture_modules(kind),
                                       "max_intermediate_tensors": N_LAYERS * (2 if with_index else 1)}
         patch_router_capture(with_index)
         keep_capture_config_on_clear()
@@ -147,34 +153,33 @@ def last_row(t, d):
     return t[0]
 
 
-def unpack_captures(got, n, with_index):
-    L, M = N_LAYERS, 3 * N_LAYERS
-    hid = None
-    res = {"valid": torch.zeros(n, dtype=torch.bool)}
+def unpack_captures(got, n, with_index, hid=HIDDEN):
+    """Captured tensors: per layer (attention output, MoE output, layer output) in module order, then the
+    manual router tensors (logits[, expert ids]) per layer."""
+    L = N_LAYERS
+    k = 2 if with_index else 1
+    res = {"valid": torch.zeros(n, dtype=torch.bool), "shapes_step1": None}
+    for b in ("attn", "moe", "resid"):
+        res[b] = torch.zeros(n, L, hid, dtype=torch.bfloat16)
+    res["router_logits"] = None
+    res["expert_index"] = torch.zeros(n, L, 8, dtype=torch.int16) if with_index else None
     for s, caps in enumerate(got[:n]):
         if s == 0:
             continue  # prefill: CTE shards some outputs by sequence across TP; boundaries are scored on decode steps
-        mod, man = caps[:M], caps[M:]
-        if len(mod) < M or mod[0].numel() <= 1 or not man or man[0].numel() <= 1:
-            continue
-        if hid is None:
-            hid = mod[0].shape[-1]
-            E = man[0].shape[-1]
-            for k in ("attn", "moe", "resid"):
-                res[k] = torch.zeros(n, L, hid, dtype=torch.bfloat16)
-            res["router_logits"] = torch.zeros(n, L, E)
-            res["expert_index"] = torch.zeros(n, L, 8, dtype=torch.int16) if with_index else None
-        res["valid"][s] = True
-        k = 2 if with_index else 1
+        if len(caps) != 3 * L + k * L or caps[0].numel() <= 1 or caps[3 * L].numel() <= 1:
+            continue  # capture fallback in this bucket
+        if res["shapes_step1"] is None:
+            res["shapes_step1"] = [list(c.shape) for c in caps]
+        mod, man = caps[:3 * L], caps[3 * L:]
+        if res["router_logits"] is None:
+            res["router_logits"] = torch.zeros(n, L, man[0].numel())
         for i in range(L):
-            res["attn"][s, i] = last_row(mod[3 * i], hid).bfloat16()
-            res["moe"][s, i] = last_row(mod[3 * i + 1], hid).bfloat16()
-            res["resid"][s, i] = last_row(mod[3 * i + 2], hid).bfloat16()
-            res["router_logits"][s, i] = last_row(man[k * i], E).float()
+            for j, b in enumerate(("attn", "moe", "resid")):
+                res[b][s, i] = last_row(mod[3 * i + j], hid).bfloat16()
+            res["router_logits"][s, i] = man[k * i].reshape(-1).float()
             if with_index:
-                res["expert_index"][s, i] = last_row(man[k * i + 1], 8).to(torch.int16)
-    for k in ("attn", "moe", "resid", "router_logits", "expert_index"):
-        res.setdefault(k, None)
+                res["expert_index"][s, i] = man[k * i + 1].reshape(-1).to(torch.int16)
+        res["valid"][s] = True
     return res
 
 
@@ -242,8 +247,15 @@ def main():
             if tag == "tf":
                 torch.save({"scores": sc, "sequences": seq, "plen": plen}, f"{od}/tf_p{nn}.pt")
             if a.capture and tag == "tf":
-                c = unpack_captures(f.got, n, with_index)
+                try:
+                    c = unpack_captures(f.got, n, with_index)
+                except AssertionError:
+                    json.dump([[list(t.shape) for t in st] for st in f.got[:3]],
+                              open(f"{a.out}/capture_shapes_failed.json", "w"))
+                    raise
                 c["plen"] = plen
+                shapes = c.pop("shapes_step1")
+                info.setdefault("capture_shapes_step1", shapes)
                 torch.save(c, f"{a.out}/cap/cap_p{nn}.pt")
                 print(f"CAP {p['id']} valid={int(c['valid'].sum())}/{n}", flush=True)
             print(f"TF {tag} {p['id']} plen={plen} n={n} {time.time() - t0:.1f}s", flush=True)

@@ -38,3 +38,9 @@ python tools/compare_refs.py ~/runs/p1/val/xla_plain/free ~/runs/val ~/runs/val_
 | ppl w00–w15 | 16 × 512 tokens | – | teacher-forced from token 0 | wikitext-2-raw-v1 test, 16 distinct articles, raw format |
 
 Totals: 64 prompts, 7,264 teacher-forced positions (+ 8,176 perplexity tokens); ≤ 768 tokens each (max 754). Wikitext test downloaded via the HF datasets-server rows API (4,358 rows = the full split), sha256 `bbf94c53…`.
+
+## 2026-11-17 12:45–13:00 — T2 capture build for the validator: four failed attempts (Measured)
+
+Capture build `traced_xla_trn2_229_s768_vcap`: modules `layers.i.self_attn`, `layers.i.mlp`, `layers.i` (48 each) + manual router logits (+ XLA expert ids), `TensorRegistry.clear` patched during tracing so every bucket keeps the capture config. Compile 1,165 s.
+- Attempt 1 (load 2,525 s, compile + shard-on-load): crashed at p06's prefill. On the CTE step the MoE output capture is **sequence-sharded across TP** (16 rows for a 64-token bucket), so "row plen−1 of the padded prefill" is wrong — and would have silently read the wrong row for prompts shorter than 17 tokens. Fix: op-boundary and router rows are scored on decode steps only (p ≥ 1); the logits row still includes p = 0.
+- Attempts 2–4 (loads 626 / 306 / 536 s): crashed on the first decode step; attempt 3 rested on a wrong guess (that the hook returns every element of a tuple output) and is superseded. Attempt 4 dumped the step shapes: 240 tensors = 144 module + 96 manual, **one tensor per module** (Day 3 was right), but for `layers.i.self_attn` that tensor is `[1, 1, 128]` (a RoPE/KV-side element of its tuple output), not the attention output; `mlp` and the decoder layer give `[1, 1, 2048]`. Fix: capture `layers.i.self_attn.o_proj` (single output, the TP-reduced attention output, as on Day 3) and, for config E, an identity child module on its TKG attention output. The capture build was deleted and recompiled (attempt 5).

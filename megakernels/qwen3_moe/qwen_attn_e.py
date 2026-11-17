@@ -63,6 +63,7 @@ class NeuronQwen3MoEAttentionE(qwen.NeuronQwen3MoEAttention):
         self.Wqkv_nki = PreTransposedColumnParallelLinear(H, hq + 2 * hkv, bias=False, gather_output=False, dtype=dt)
         self.Wo_nki = ColumnParallelLinear(H, hq, bias=False, gather_output=False, dtype=dt)
         self._replica_groups = (list(range(config.neuron_config.tp_degree)),)
+        self.attn_out_id = torch.nn.Identity()  # hook point for tensor capture of the TKG attention output
 
     def forward(self, hidden_states, attention_mask=None, position_ids=None, past_key_value=None, rmsnorm=None,
                 e_tkg=None, **kwargs):
@@ -76,7 +77,7 @@ class NeuronQwen3MoEAttentionE(qwen.NeuronQwen3MoEAttention):
             hidden_states, self.Wqkv_nki.weight, self.Wo_nki.weight,
             self.q_layernorm.weight, self.k_layernorm.weight, gpre,
             K, V, cos, sin, position_ids.to(torch.int32), replica_groups=self._replica_groups)
-        return Y, (K_out, V_out), cos, sin
+        return self.attn_out_id(Y), (K_out, V_out), cos, sin
 
 
 class NeuronQwen3MoeDecoderLayerE(qwen.NeuronQwen3MoeDecoderLayer):

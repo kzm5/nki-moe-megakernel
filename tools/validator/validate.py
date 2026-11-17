@@ -1,6 +1,7 @@
 """Frozen correctness validator: build -> teacher-forced capture over the corpus -> one JSON of spec rows.
 
-Computes (cand vs fp32 golden, ratios vs the baseline XLA capture of the same campaign):
+Computes (cand vs fp32 golden; ratios vs the same campaign's XLA: --base = XLA capture build for op_boundary
+and router, --base-logits = production XLA build for logits_tf, worst_pos and perplexity):
     op_boundary   per layer, per boundary (attn, moe, resid): pooled rel-L2 vs golden; rho = cand / base;
                   gate median_L rho <= rho_median_max and max_L rho <= rho_layer_max (per boundary)
     router        tie-tolerant top-8 flip rate vs golden; gate cand - base <= router_pp_max (overall)
@@ -107,7 +108,8 @@ def ppl(corpus, d):
     return float(torch.exp(nll.mean())), int(nll.numel())
 
 
-def score(cand, base, prev, out):
+def score(cand, base, prev, out, base_logits=None):
+    base_logits = base_logits or base
     spec = json.load(open(SPEC))
     th = spec["thresholds"]
     corpus = json.load(open(CORPUS))
@@ -158,7 +160,7 @@ def score(cand, base, prev, out):
     else:
         rows["router"] = {"pass": None, "status": "not_measurable", "why": "no router capture"}
     # logits
-    lc, lb = logits_row(corpus, cand), logits_row(corpus, base)
+    lc, lb = logits_row(corpus, cand), logits_row(corpus, base_logits)
     kc = torch.cat([lc[k]["kl"] for k in lc])
     kb = torch.cat([lb[k]["kl"] for k in lc])
     t1 = torch.cat([lc[k]["top1"] for k in lc]).float()
@@ -178,7 +180,7 @@ def score(cand, base, prev, out):
                                          .bincount(minlength=6).tolist()}
     # perplexity
     pc_, n = ppl(corpus, cand)
-    pb_, _ = ppl(corpus, base)
+    pb_, _ = ppl(corpus, base_logits)
     pg_, _ = ppl(corpus, GOLDEN) if os.path.exists(f"{GOLDEN}/ppl_w00.pt") else (None, 0)
     rel = pc_ / pb_ - 1
     rows["perplexity"] = {"pass": abs(rel) <= th["ppl_rel_max"], "ppl_cand": pc_, "ppl_base": pb_, "ppl_golden": pg_,
@@ -197,7 +199,7 @@ def score(cand, base, prev, out):
     rows["run_to_run"] = r2r
     blocking = [k for k in ("op_boundary", "router", "logits_tf", "worst_pos", "perplexity")]
     measured = [k for k in blocking if rows[k]["pass"] is not None]
-    rep = {"cand": cand, "base": base, "cand_device": {k: dc[k] for k in ("kind", "cdir", "capture", "mutant")},
+    rep = {"cand": cand, "base": base, "base_logits": base_logits, "cand_device": {k: dc[k] for k in ("kind", "cdir", "capture", "mutant")},
            "pass": all(rows[k]["pass"] for k in measured),
            "rows_failed": [k for k in measured if not rows[k]["pass"]],
            "rows_not_measurable": [k for k in blocking if rows[k]["pass"] is None],
@@ -226,7 +228,7 @@ def run(a):
                     "--stats", f"cand={a.out}"]
         print("RUN", " ".join(cmd), flush=True)
         subprocess.run(cmd, check=True)
-    return score(a.out, a.base, a.prev, f"{a.out}/report.json")
+    return score(a.out, a.base, a.prev, f"{a.out}/report.json", a.base_logits)
 
 
 def main():
@@ -240,17 +242,19 @@ def main():
     r.add_argument("--mutant", default="")
     r.add_argument("--base", default=f"{P1}/val/xla_base")
     r.add_argument("--prev")
+    r.add_argument("--base-logits", default=f"{P1}/val/xla_plain")
     s = sub.add_parser("score")
     s.add_argument("--cand", required=True)
     s.add_argument("--base", default=f"{P1}/val/xla_base")
     s.add_argument("--prev")
+    s.add_argument("--base-logits", default=f"{P1}/val/xla_plain")
     s.add_argument("--out", required=True)
     sub.add_parser("hashes")
     a = ap.parse_args()
     if a.cmd == "run":
         run(a)
     elif a.cmd == "score":
-        score(a.cand, a.base, a.prev, a.out)
+        score(a.cand, a.base, a.prev, a.out, a.base_logits)
     else:
         print(json.dumps(current_hashes(), indent=1))
 

@@ -128,6 +128,32 @@ Flag for Kevin: as frozen, the spec fails the Phase 0 reference config B on one 
 
 **Spec v1.1 adopted (Kevin, 2026-11-18; re-frozen 19:06 UTC / 14:06 ET).** `results/phase1/spec_v1.1.json` = v1.0 plus `gross_requires_top1_change: true`: a worst-position counts only if cand KL > 0.2, base KL < 0.01 **and** cand top-1 ≠ golden top-1. Reason: under v1.0, lib MoE (p60@69) and E (p17@41) each failed on a single near-tie position where they keep golden's top-1 but are more confident, and the "clean" threshold sat on a knife edge (XLA 0.0098 vs 0.01); m1's gross position changes top-1 and stays caught. Timing: decided after the T5/T7 results; all v1.0 numbers above stand as reported under v1.0. Implementation: `validate.py --spec {1.0,1.1}` (default 1.1); `frozen_ok` requires the spec's hash to be one of the frozen versions. Check (Measured): rescoring lib MoE under v1.0 with the new code reproduces the original v1.0 report row for row. v1 freeze kept as `FROZEN_v1.md` / `frozen_v1.json`. Hardening: the freeze records themselves (`frozen*.json`, `FROZEN*.md`) and both specs are now guarded paths; under v1 the guard read an unprotected `frozen.json`, which an agent could have moved to disable it (verified closed: moving `frozen.json` and editing `spec_v1.1.json` are now denied).
 
+## 2026-11-18 17:32–17:50 ET — T9 profile of config E, seq 768 (Measured)
+
+```bash
+bash ~/runs/prof/run_prof.sh p1_prof_E_s768 E ~/qwen-30b-a3b/traced_E_trn2_229_s768 768     # 13.8 min; profile_decode.py, kind E
+python tools/profile_table.py ~/runs/prof/tables/E_s768.json E_s768_b128=…/tkg_bucket0.neff:…/small_bucket/*/*/*.ntff \
+  E_s768_b768=…/tkg_bucket3.neff:…/large_bucket/*/*/*.ntff
+```
+Same method as Phase 0 Table 5 (inspect `model` mode around TKG calls 6 and 764, least-skewed rank, µs per layer). B, C, D rows are the Phase 0 tables (Nov 11–12).
+
+| µs/layer (bucket 128 / 768) | B lib MoE | C megakernel | D lib MoE + NxDI NKI attn | **E** | E − B | E − C |
+|---|---|---|---|---|---|---|
+| Wall | 193.5 / 203.6 | 192.5 / 192.8 | 219.2 / 230.4 | **231.3 / 231.3** | +37.8 / +27.7 | +38.8 / +38.5 |
+| Sync engine | 60.2 / 60.1 | 58.8 / 58.5 | 59.3 / 59.1 | 62.0 / 62.1 | +1.8 / +2.0 | +3.2 / +3.6 |
+| DMA active | 126.1 / 128.3 | 123.3 / 123.5 | 146.0 / 151.3 | 142.7 / 142.3 | **+16.6 / +14.0** | +19.4 / +18.8 |
+| Tensor engine | 62.5 / 62.8 | 58.6 / 58.4 | 66.2 / 65.6 | 64.9 / 64.7 | +2.4 / +1.9 | +6.3 / +6.3 |
+| Vector / Scalar / GpSimd | 45.5 / 55.3 / 61.3 | 49.2 / 29.8 / 56.4 | 52.8 / 36.2 / 60.6 | 58.4 / 37.0 / 57.7 | **+12.9** / −18.3 / −3.6 | +9.2 / +7.2 / +1.3 |
+| CC ops | 19.2 / 20.0 | 28.8 / 28.8 | 20.7 / 20.7 | 25.1 / 25.0 | +5.9 / +5.0 | −3.7 / −3.8 |
+| DMA packets / avg bytes | 42,261 / 790 | 43,748 / 783 | 41,125 / 802 | 44,169 / 753 | +5% / −5% | +1% / −4% |
+| Spill reload / save (bytes per graph) | 212,864 / 122,888 | 19,328 / 36,872 | 470,912 / 233,480 | 360,320 / 135,176 | 1.7× / 1.1× | 18.6× / 3.7× |
+| Graph time (ms) | 9.29 / 9.77 | 9.23 / 9.25 | 10.52 / 11.06 | **11.10 / 11.10** | +1.81 / +1.33 | +1.87 / +1.85 |
+
+- **Measured:** E's slowdown is device time: graph +1.81 ms (b128) / +1.33 ms (b768) over B, matching the benchmark gap (+1.65 ms at 768, averaged over buckets). Host overhead is not the explanation.
+- **Measured:** E is identical in the 128 and 768 buckets (wall 231.3 µs, same packet count): its kernel, like C, attends over the full `kv_mgr.past_key_values` cache (768 slots, masked) in every bucket — which is also why E's and C's benchmark latency barely grows with context. B's attention grows +10 µs/layer from bucket 128 to 768.
+- **Measured:** relative to B, E adds DMA-active +14–17 µs, vector +13 µs and CC +5–6 µs per layer (the in-kernel all-reduce-gather replaces XLA's), removes 18 µs of scalar work (XLA softmax/RoPE), and spills 1.7× more; relative to C, the same attention stage costs +39 µs/layer when run standalone, and C spills 19× less.
+- **Hypothesis (T8b tests it):** most of E's +38 µs/layer is the cost of entering and leaving an NKI kernel per layer — reloading weights/constants into SBUF and the mask/RoPE scratch rebuilt per call, and no overlap with the neighbouring XLA ops — rather than the attention math itself.
+
 **Rescore of every build under v1.0 and v1.1 (17:06–17:32 ET, Measured; `tools/chain_q2b.sh rescore` → `results/phase1/reports_v10/`, `reports_v11/`; all `frozen_ok: true`).** m1–m3's per-layer captures were deleted for disk before the rescore, so their router row reads "not measurable"; it is identical under both versions and carries over from the original v1.0 reports (m1 +0.10 pp pass, m2 +80.1 pp fail, m3 +0.07 pp pass).
 
 | Build | v1.0 verdict (failed rows) | v1.1 verdict (failed rows) | gross v1.0 → v1.1 |
@@ -201,4 +227,5 @@ Each run is a separate process (`run_job.sh … --skip-compile`, shard-on-load, 
 - **Measured:** E's context slope is smaller than B's (768 → 2048: E +0.19, B +0.47, C +0.08 ms), so the NKI attention kernel does remove most of the XLA context cost; C additionally removes E's ~1.9 ms fixed cost.
 - ~~**Decision rule (T8):** |C − E| = 1.85 ms (768) and 1.96 ms (2048) vs 2 × pooled std = 0.03 / 0.17 ms → fusion's share of C's lead is ~1.9 ms/step, and the Phase 4 fusion-depth sweep is back in scope.~~ **Corrected by Kevin, 2026-11-18:** the rule assumed E would land near B. E is 1.65 ms slower than B — like config D with a different attention kernel — so C − E is not fusion's share; it measures the cost of running NKI attention unfused, which fusion avoids. **Fusion's net gain is C vs B: 0.20 ms at 768, 0.59 ms at 2048.** The fusion-depth sweep is **not** back in scope. Next: T8b (per-call boundary cost; E with C's compiler flags).
 - **Hypothesis (to be split by the T9 profile):** E's 1.9 ms is per-call cost that fusion removes, made of (a) per-layer rebuilds of layer-invariant work that C hoists out of its layer loop (attention mask and permuted cos/sin HBM scratch, built in every E call), (b) kernel-call boundaries that stop XLA from overlapping the next layer's weight DMA with the previous layer's compute, (c) compiler flags (E uses B's TKG −O1, cc-pipeline-tiling 2; C −O3, tiling 4, DMA vectorization). Only (b) is fusion in the narrow sense; (a) is cheap to hoist without fusing layers. The "fusion share" above is therefore an upper bound.
+- See T9 below: E's extra time is on the device (graph +1.8 ms over B at bucket 128).
 - Day-to-day: B at 768 is 0.18 ms slower than on Nov 12 (10.31 ± 0.01, pre-sharded weights; today shard-on-load) and C 0.14 ms slower; same-session differences are what count.

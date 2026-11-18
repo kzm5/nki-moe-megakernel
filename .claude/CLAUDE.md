@@ -9,7 +9,7 @@
 - Don't edit kernel files without the user's approval.
 - The Capacity Block ends 2026-12-01 06:30 ET and terminates the instance. Everything must be pushed before then.
 - `docs/RESEARCH_PLAN.md` mirrors the user's master plan doc and is committed by the user's planning assistant: never edit, regenerate or delete it. Record any discrepancy between it and the results in `results/phase1/FINDINGS.md`.
-- Before every push, run `git pull --rebase mine phase0/trn2-setup` so pushes from both sides stay fast-forward.
+- Before every push, run `git pull --no-rebase mine phase0/trn2-setup` so pushes from both sides stay fast-forward (merge commits are fine; a rebase cannot rewrite the read-only validator files).
 
 ## NKI Kernel Development
 

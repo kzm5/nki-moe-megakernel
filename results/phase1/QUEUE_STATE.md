@@ -3,7 +3,7 @@
 Updated: 2026-11-17 14:15 ET. Deadlines: Q1 Thu Nov 19 12:00 ET, Q2 Sun Nov 22 12:00 ET.
 
 ## Environment
-- Worktree `~/nki-moe-megakernel/.claude/worktrees/q1q2` (branch `worktree-q1q2`), push `git push mine HEAD:phase0/trn2-setup` after `git pull --rebase mine phase0/trn2-setup`.
+- Worktree `~/nki-moe-megakernel/.claude/worktrees/q1q2` (branch `worktree-q1q2`), push `git push mine HEAD:phase0/trn2-setup` after `git pull --no-rebase mine phase0/trn2-setup` (rule changed Nov 18; merge commits are fine).
 - Device/CPU jobs: `~/runs/run_py.sh NAME script args…` (cds to this worktree; log `~/runs/NAME.log`). Ledger `~/runs/ledger.jsonl` → `results/phase1/ledger.jsonl`.
 - Phase-1 data: `~/runs/p1/` (`refs/`, `golden/` frozen; `val/<run>/` device outputs + `stats.pt`; `src_wikitext/`).
 - Frozen validator: `results/phase1/FROZEN.md`; guard hook in `~/.claude/settings.json` (denies edits of frozen paths; use Edit tool / `git commit -F`).

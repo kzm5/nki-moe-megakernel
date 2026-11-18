@@ -6,7 +6,8 @@ and router, --base-logits = production XLA build for logits_tf, worst_pos and pe
                   gate median_L rho <= rho_median_max and max_L rho <= rho_layer_max (per boundary)
     router        tie-tolerant top-8 flip rate vs golden; gate cand - base <= router_pp_max (overall)
     logits_tf     mean KL(golden || cand) over all corpus positions; gate <= kl_ratio_max * base; top-1 reported
-    worst_pos     max KL; count(cand KL > gross_kl and base KL < base_clean_kl); gate count == 0
+    worst_pos     max KL; count(cand KL > gross_kl and base KL < base_clean_kl [and cand top-1 != golden top-1
+                  when the spec sets gross_requires_top1_change]); gate count == 0
     perplexity    exp(mean NLL) on the passages; gate |cand / base - 1| <= ppl_rel_max
     run_to_run    in-process repeat (and --prev cross-process) bit-identity; non-blocking, documented
 
@@ -14,9 +15,10 @@ Returns:
     REPORT.json  {"rows": {...}, "pass": bool, "hashes": {...}, "frozen_ok": bool, ...}
 
 Usage (precedence: run, then score):
-    validate.py run KIND CDIR OUT [--capture] [--mutant mN] [--base DIR] [--prev DIR]
-    validate.py score --cand DIR --base DIR [--prev DIR] --out REPORT.json
-    validate.py hashes
+    validate.py run KIND CDIR OUT [--capture] [--mutant mN] [--base DIR] [--prev DIR] [--spec 1.1]
+    validate.py score --cand DIR --base DIR [--prev DIR] --out REPORT.json [--spec 1.1]
+    validate.py hashes [--spec 1.1]
+    --spec: a version in SPECS (default DEFAULT_SPEC) or a path
 """
 import argparse, glob, hashlib, json, math, os, subprocess, sys, time
 import torch
@@ -26,7 +28,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 H = os.path.expanduser("~")
 P1 = f"{H}/runs/p1"
-SPEC = f"{ROOT}/results/phase1/spec.json"
+SPECS = {"1.0": f"{ROOT}/results/phase1/spec.json", "1.1": f"{ROOT}/results/phase1/spec_v1.1.json"}
+DEFAULT_SPEC = "1.1"
+SPEC = SPECS[DEFAULT_SPEC]
 CORPUS = f"{ROOT}/results/phase1/corpus/corpus.json"
 FROZEN = f"{ROOT}/results/phase1/frozen.json"
 GOLDEN = f"{P1}/golden"
@@ -44,11 +48,16 @@ def sha(path):
     return h.hexdigest()
 
 
-def current_hashes():
+def spec_path(spec):
+    return SPECS.get(spec, spec) if spec else SPEC
+
+
+def current_hashes(spec=None):
     g = sorted(glob.glob(f"{GOLDEN}/*.pt"))
     r = sorted(glob.glob(f"{REFS}/expected_p*.pt"))
     man = lambda fs: hashlib.sha256("".join(f"{os.path.basename(f)} {sha(f)}\n" for f in fs).encode()).hexdigest()
-    return {"validator": {f: sha(f"{HERE}/{f}") for f in VALIDATOR_FILES}, "spec": sha(SPEC), "corpus": sha(CORPUS),
+    return {"validator": {f: sha(f"{HERE}/{f}") for f in VALIDATOR_FILES}, "spec": sha(spec_path(spec)),
+            "spec_file": os.path.basename(spec_path(spec)), "corpus": sha(CORPUS),
             "golden_manifest": man(g), "refs_manifest": man(r), "n_golden_files": len(g), "n_refs": len(r)}
 
 
@@ -108,15 +117,15 @@ def ppl(corpus, d):
     return float(torch.exp(nll.mean())), int(nll.numel())
 
 
-def score(cand, base, prev, out, base_logits=None):
+def score(cand, base, prev, out, base_logits=None, spec=None):
     base_logits = base_logits or base
-    spec = json.load(open(SPEC))
-    th = spec["thresholds"]
+    spec_d = json.load(open(spec_path(spec)))
+    th = spec_d["thresholds"]
     corpus = json.load(open(CORPUS))
-    hashes = current_hashes()
+    hashes = current_hashes(spec)
     frozen = json.load(open(FROZEN)) if os.path.exists(FROZEN) else None
-    frozen_ok = frozen is not None and all(frozen.get(k) == hashes[k] for k in
-                                           ("validator", "spec", "corpus", "golden_manifest", "refs_manifest"))
+    frozen_ok = (frozen is not None and hashes["spec"] in frozen.get("specs", {}).values()
+                 and all(frozen.get(k) == hashes[k] for k in ("validator", "corpus", "golden_manifest", "refs_manifest")))
     rows = {}
     # op boundary
     if os.path.exists(f"{cand}/stats.pt") and os.path.exists(f"{base}/stats.pt"):
@@ -170,7 +179,10 @@ def score(cand, base, prev, out, base_logits=None):
                          "top1_golden_base": float(torch.cat([lb[k]["top1"] for k in lb]).float().mean()),
                          "n_positions": int(kc.numel())}
     names = [(k, i) for k in lc for i in range(len(lc[k]["kl"]))]
-    gross = ((kc > th["gross_kl"]) & (kb < th["base_clean_kl"])).nonzero().flatten().tolist()
+    g_mask = (kc > th["gross_kl"]) & (kb < th["base_clean_kl"])
+    if th.get("gross_requires_top1_change", False):
+        g_mask &= ~t1.bool()
+    gross = g_mask.nonzero().flatten().tolist()
     w = int(kc.argmax())
     rows["worst_pos"] = {"pass": len(gross) == 0, "max_kl": float(kc.max()), "max_kl_at": names[w],
                          "base_kl_there": float(kb[w]), "gross_count": len(gross),
@@ -203,10 +215,10 @@ def score(cand, base, prev, out, base_logits=None):
            "pass": all(rows[k]["pass"] for k in measured),
            "rows_failed": [k for k in measured if not rows[k]["pass"]],
            "rows_not_measurable": [k for k in blocking if rows[k]["pass"] is None],
-           "rows": rows, "thresholds": th, "hashes": hashes, "frozen_ok": frozen_ok,
+           "spec_version": spec_d.get("version"), "rows": rows, "thresholds": th, "hashes": hashes, "frozen_ok": frozen_ok,
            "scored_utc": time.strftime("%FT%TZ", time.gmtime())}
     json.dump(rep, open(out, "w"), indent=1)
-    summ = {k: rep[k] for k in ("pass", "rows_failed", "rows_not_measurable", "frozen_ok")}
+    summ = {k: rep[k] for k in ("spec_version", "pass", "rows_failed", "rows_not_measurable", "frozen_ok")}
     summ["key"] = {"rho_median": {b: rows["op_boundary"].get("per_boundary", {}).get(b, {}).get("rho_median")
                                   for b in BOUNDARIES},
                    "router_delta_pp": rows["router"].get("delta_pp"), "kl_ratio": ratio,
@@ -228,7 +240,7 @@ def run(a):
                     "--stats", f"cand={a.out}"]
         print("RUN", " ".join(cmd), flush=True)
         subprocess.run(cmd, check=True)
-    return score(a.out, a.base, a.prev, f"{a.out}/report.json", a.base_logits)
+    return score(a.out, a.base, a.prev, f"{a.out}/report.json", a.base_logits, a.spec)
 
 
 def main():
@@ -243,20 +255,23 @@ def main():
     r.add_argument("--base", default=f"{P1}/val/xla_base")
     r.add_argument("--prev")
     r.add_argument("--base-logits", default=f"{P1}/val/xla_plain")
+    r.add_argument("--spec", default=DEFAULT_SPEC)
     s = sub.add_parser("score")
     s.add_argument("--cand", required=True)
     s.add_argument("--base", default=f"{P1}/val/xla_base")
     s.add_argument("--prev")
     s.add_argument("--base-logits", default=f"{P1}/val/xla_plain")
     s.add_argument("--out", required=True)
-    sub.add_parser("hashes")
+    s.add_argument("--spec", default=DEFAULT_SPEC)
+    h = sub.add_parser("hashes")
+    h.add_argument("--spec", default=DEFAULT_SPEC)
     a = ap.parse_args()
     if a.cmd == "run":
         run(a)
     elif a.cmd == "score":
-        score(a.cand, a.base, a.prev, a.out, a.base_logits)
+        score(a.cand, a.base, a.prev, a.out, a.base_logits, a.spec)
     else:
-        print(json.dumps(current_hashes(), indent=1))
+        print(json.dumps(current_hashes(a.spec), indent=1))
 
 
 if __name__ == "__main__":

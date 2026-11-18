@@ -147,3 +147,15 @@ Frozen validator on E (production build, logits rows; op-boundary/router pending
 E's gross position p17@41 is a two-way near tie in golden ("," 0.60 / " line" 0.40). Every build keeps golden's top-1: XLA KL 0.0011 (0.62); lib MoE, megakernel and the benign control m3 all 0.129 (0.82); E 0.328 (0.905). It is the position Phase 0 called "the largest NKI-specific KL, shared by both builds". Same pattern as B's p60@69; candidate worst-pos row 1 (top-1 must change) would clear both.
 
 **Decision taken (rule interpretation, for Kevin):** T7 says E must pass before any timing claim. As frozen, E fails — and so does the reference config B — on a single same-top-1 position. T8 measurements proceed; every E timing claim is labelled "conditional on the validator verdict (fails worst_pos on 1 same-top-1 position)".
+
+E capture build (`traced_E_trn2_229_s768_vcap`, compile 893 s, captures via an identity module on the kernel's attention output): **bit-identical to the E production build on 64/64 prompts**; valid at every decode step. Full validator: op_boundary **pass** (median ρ attention 0.927, MoE 0.929, residual 0.939; max 1.29 / 1.41 / 1.19), router **pass** (8.24% vs XLA 9.52%, −1.27 pp; no layer above XLA), logits/perplexity pass, worst_pos fail (p17@41) — same verdict as B.
+
+| rel-L2 vs golden | L0 | L1 | L2 | L8 | L16 | L24 | L32 | L40 | L47 |
+|---|---|---|---|---|---|---|---|---|---|
+| attention, E | 0.0026 | 0.0067 | 0.0112 | 0.0238 | 0.0537 | 0.0959 | 0.1009 | 0.0940 | 0.0285 |
+| attention, B | 0.0028 | 0.0076 | 0.0122 | 0.0228 | 0.0525 | 0.0932 | 0.0978 | 0.0897 | 0.0273 |
+| attention, XLA | 0.0028 | 0.0091 | 0.0150 | 0.0274 | 0.0610 | 0.1016 | 0.1078 | 0.1001 | 0.0288 |
+| residual, E | 0.0051 | 0.0076 | 0.0092 | 0.0166 | 0.0263 | 0.0418 | 0.0503 | 0.0503 | 0.0508 |
+| residual, B | 0.0052 | 0.0077 | 0.0092 | 0.0163 | 0.0261 | 0.0408 | 0.0479 | 0.0483 | 0.0500 |
+
+- **Measured:** the megakernel's attention stage is at least as accurate as XLA attention where it is first applied (L0 attention 0.0026 vs 0.0028, same input); with lib MoE in both, E's residual error tracks B's within 0–5% at every depth, and both stay below XLA's.

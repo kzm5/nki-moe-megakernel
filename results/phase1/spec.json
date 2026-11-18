@@ -1,0 +1,26 @@
+{
+ "version": "1.0",
+ "approved": "Correctness spec approved by Zhiru 2026-11-16 (fp32 golden, error ratio rho, teacher forcing, emitted-token divergence, worst-position row); thresholds from docs/queues/Q1Q2.md T2",
+ "operating_point": "Qwen3-30B-A3B, trn2.3xlarge, SDK 2.29, TP=4, LNC=2, bs=1, seq-len 768, on-device greedy sampling, logits returned",
+ "reference": "fp32 CPU layer-by-layer forward (stock HF Qwen3MoeDecoderLayer) on the XLA greedy reference tokens",
+ "baseline": "stock NxDI XLA, captured fresh in the same campaign with the same validator: the production build for logits_tf, worst_pos and perplexity; the XLA tensor-capture build for op_boundary and router (the capture build's prefill at the 512 context bucket is not bit-identical to the production build)",
+ "thresholds": {
+  "rho_median_max": 1.25,
+  "rho_layer_max": 2.0,
+  "router_pp_max": 0.5,
+  "kl_ratio_max": 1.25,
+  "gross_kl": 0.2,
+  "base_clean_kl": 0.01,
+  "ppl_rel_max": 0.005
+ },
+ "rows": {
+  "op_boundary": "Boundaries per layer: attn = self_attn output, moe = MoE block output, resid = decoder-layer output. Per layer, rel-L2 = sqrt(sum_pos ||cand-gold||^2 / sum_pos ||gold||^2) over all teacher-forced corpus positions valid in both builds; rho_L = rel-L2(cand) / rel-L2(base). Pass per boundary if median_L rho <= rho_median_max and max_L rho <= rho_layer_max; row passes if all three boundaries pass. Not measurable for builds without per-layer modules (megakernel).",
+  "router": "Flip at (position, layer) if golden's top-8 set is not a valid top-8 of the build's returned router logits (ties broken either way); for builds that return expert indices, flip unless the indices equal golden's set or both are valid top-8s of the returned logits. Gate on the overall rate: cand - base <= router_pp_max percentage points. Per-layer deltas reported, not gated.",
+  "logits_tf": "Per position KL(golden || cand) on softmax of the returned scores (finite entries). Gate: mean over all corpus positions <= kl_ratio_max * base mean. Top-1 agreement with golden reported.",
+  "worst_pos": "max per-position KL reported; gross = cand KL > gross_kl and base KL < base_clean_kl at the same position; gate gross count == 0.",
+  "perplexity": "exp(mean NLL) over all tokens of the perplexity passages, teacher-forced from each passage's first token. Gate |ppl_cand / ppl_base - 1| <= ppl_rel_max (two-sided, as specified).",
+  "run_to_run": "SHA-256 of every prompt's teacher-forced scores, second pass in the same process, and optionally against an earlier process. Non-blocking: 'bit_identical' or 'documented' with the differing prompts.",
+  "free_running": "Not computed by the validator (reported only in the spec, not a gate)."
+ },
+ "overall": "pass = every measurable blocking row passes (op_boundary, router, logits_tf, worst_pos, perplexity); rows that cannot be measured are listed in rows_not_measurable."
+}

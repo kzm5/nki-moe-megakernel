@@ -86,3 +86,42 @@ Medians over layers: attention 0.068, MoE 0.096, residual 0.043; maxima attentio
 - **Measured:** residual-stream error grows roughly linearly with depth to L34–36 (0.007 → 0.065) and then declines to 0.051 at L47; attention and MoE block errors are 2–4× the residual error (their outputs are small relative to the residual).
 - **Measured:** bucket dependence is small; the 256 bucket is 10–20% higher than the others in layers 20–47.
 - **Hypothesis (H2.6):** the late-layer decline means the residual stream damps per-layer error after ~L36 rather than amplifying it; to be tested with the lib MoE and E captures.
+
+## 2026-11-17 14:07 → — T5 device chain (`~/runs/p1/chain_q1.sh xla_self m1 m2 m4 m3 libmoe nki`) (Measured)
+- `xla_self` (same XLA capture build, second process, 14 min): teacher-forced scores **bit-identical to the baseline process on 64/64 prompts**; in-process repeat 64/64.
+- `m1` (bf16-accumulated expert down-projection, 24 chunks of 8 per rank): **compile 8,774 s (2.4 h)** vs 1,073 s for the unmutated capture build — the chunked einsum multiplies the TKG/CTE graph size; load 9,483 s total; repeat 64/64. Budget note: torch-level faults that expand the graph cost hours of compile.
+- `m2` 34 min (compile 1,082 s), `m4` 35 min (1,191 s), `m3` 31 min (917 s), `libmoe` capture build 45 min (1,069 s), `nki` (Phase 0 greedy build, no capture) 11 min. All EXIT 0, every in-process repeat 64/64 bit-identical. m4 check: at layer 24 the captured expert set is not a valid top-8 of the router logits at 117/127 steps of p00 (the other 10 are exact 8th/9th ties); layers 23/25 unaffected.
+- One golden `--stats` pass for xla_self, m1–m4, libmoe: 689 s, 31 GB RSS.
+
+## 2026-11-17 21:20 ET — T5 Gate 1: frozen validator on XLA, mutants, lib MoE, megakernel (Measured)
+
+```bash
+bash ~/runs/p1/score_q1.sh m1 m2 m3 m4 libmoe nki      # validate.py score per build -> ~/runs/p1/reports/<build>.json
+python ~/runs/p1/summarize_reports.py xla_self m1 m2 m3 m4 libmoe nki
+```
+All reports `frozen_ok: true`. Baselines: op-boundary/router = XLA capture build (`xla_base`); logits/worst/perplexity = production XLA (`xla_plain`).
+
+| Build | Verdict | Failed rows | median ρ attn / MoE / resid (max) | Router Δ vs XLA (pp) | KL ratio | Gross | max KL | ppl Δ | Run-to-run |
+|---|---|---|---|---|---|---|---|---|---|
+| XLA, 2nd process | **pass** | – | 1.000 / 1.000 / 1.000 | 0.00 | 0.999 | 0 | 0.833 | 0.00% | bit-identical in-process and across processes (64/64) |
+| m1 bf16 down-proj accumulation | **fail** | worst_pos | 1.018 / 1.016 / 1.021 (1.45 L33) | +0.10 | 1.043 | 1 (p47@3) | 0.961 | −0.28% | bit-identical |
+| m2 no top-k renormalization | **fail** | all five | 9.36 / 8.01 / 11.37 (48.8) | +80.1 | 301 | 2,761 | 14.1 | +166% | bit-identical |
+| m3 reordered expert sum (control) | **pass** | – | 1.016 / 1.014 / 1.013 (1.20) | +0.07 | 1.033 | 0 | 0.745 | −0.07% | bit-identical |
+| m4 8th → 9th expert at L24 | **fail** | router | 1.000 / 1.000 / 1.000 (MoE 1.58 at L24) | **+2.10** (L24 +69.7) | 1.215 | 0 | 0.508 | −0.18% | bit-identical |
+| B lib MoE (capture build) | **fail** | worst_pos | **0.907 / 0.909 / 0.901** | **−1.40** | **0.871** | **1 (p60@69)** | 0.564 | −0.17% | bit-identical |
+| C megakernel (production build) | **pass** | – (op-boundary, router not measurable) | – | – | **0.961** | 0 | 0.858 | −0.10% | bit-identical |
+
+**Gate 1 = met as specified:** XLA passes against itself; m1, m2, m4 all fail, caught by worst_pos (m1), every row (m2), router (m4); the control m3 passes.
+
+What the table shows:
+- **Measured:** m1 is caught only by one position. On every aggregate row it is nearly indistinguishable from the benign control m3 (median ρ 1.02 vs 1.01, KL ratio 1.043 vs 1.033, router +0.10 vs +0.07 pp); only the layer-max ρ separates them (1.45 vs 1.20, both under the gate of 2). Bf16 accumulation over 8-wide chunks adds little error relative to XLA's own bf16 error budget. The catch is fragile: at p47@3 m1 changes golden's top-1 (" |" 0.73 → " " 0.58, router flips in 11 layers), but m3 reaches KL 0.074 at the same position.
+- **Measured:** m4 is caught by the router row (+2.10 pp overall, +69.7 pp at L24), and its KL ratio 1.215 is just under the 1.25 gate; op-boundary median ρ is 1.000 because only one layer is faulty (max MoE ρ 1.58 at L24 < 2).
+- **Measured — the frozen validator fails library MoE (B) on the worst-position row** with one gross position, p60@69 (B KL 0.234; XLA 0.0098, just under the 0.01 clean threshold). There B keeps golden's top-1 (" contributing", golden 0.65, B 0.87, XLA 0.69), flips the router at L37 and L39 (XLA at L37; golden L37 margin < 0.005); the megakernel sharpens the same way (KL 0.152). Every other row passes with margin (ρ ≈ 0.90, −1.40 pp flips, KL ratio 0.87). Phase 0's census (2,816 positions, 24 prompts) did not contain this prompt. **Hypothesis:** a near-tie router-flip cascade, not a kernel defect (same mechanism as Phase 0's p00@6).
+- **Measured:** the megakernel passes every measurable row on the new corpus.
+
+Candidate rows (not added to the frozen spec):
+1. **Worst position with top-1 condition:** gross = cand KL > 0.2 and base KL < 0.01 **and cand top-1 ≠ golden top-1**. On these data it keeps m1 caught (p47@3 changes top-1) and clears B's p60@69 (same top-1). It also removes the knife-edge at the base KL threshold (XLA 0.0098 vs 0.01).
+2. **Layer-max ρ at a tighter bound** (e.g. ≤ 1.3 per boundary): separates m1 (1.45) from m3 (1.20) on aggregate statistics instead of one position; check false positives on lib MoE (1.35 at L33) before adopting — it would fail B.
+3. **Per-layer router Δ**: catches m4 sharply (+69.7 pp at L24; lib MoE's per-layer max Δ is 0.00 pp), but at 0.5 pp per layer it would also fail the control m3 (+0.79 pp at L19) and m1 (+0.94 pp at L32) — sampling noise at ~7,200 positions per layer is ~0.3–0.5 pp; a per-layer gate needs a larger threshold (e.g. 5 pp).
+
+Flag for Kevin: as frozen, the spec fails the Phase 0 reference config B on one position; the decision (keep, or adopt candidate 1 in a new spec version) is his.

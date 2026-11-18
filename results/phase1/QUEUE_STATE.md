@@ -18,7 +18,7 @@ Updated: 2026-11-17 14:15 ET. Deadlines: Q1 Thu Nov 19 12:00 ET, Q2 Sun Nov 22 1
 | T2 validator | **frozen** 14:06 ET (19:06 UTC); hook verified | `tools/validator/`, `spec.json`, `FROZEN.md` | – |
 | T3 corpus + golden | **done**: 64 prompts, 16×512 ppl, golden 81 files | `~/runs/p1/golden` | – |
 | T4 error budget | **done** (XLA, all buckets) | `results/phase1/error_budget/xla.{json,csv}` | add B/E for H2.6 later |
-| T5 mutants + Gate 1 | chain running since 14:07 ET: xla_self → m1 → m2 → m4 → m3 → libmoe → nki | `chain_q1.sh` | then one golden `--stats` pass for all, `validate.py score` each |
-| T6 E | code drafted (`megakernels/qwen3_moe/{attn_e_nki,qwen_attn_e}.py`), not compiled | | compile after chain |
+| T5 mutants + Gate 1 | **done** 21:20 ET: Gate 1 met; B fails worst_pos (1 position), C passes | reports `~/runs/p1/reports/*.json`; `summarize_reports.py`; FINDINGS "Gate 1" | Kevin: decide on candidate worst-pos row |
+| T6 E | first compile + validator run started 21:15 ET (time-box 10 h → 07:15 ET) | `p1_E_plain`: `device.py E ~/qwen-30b-a3b/traced_E_trn2_229_s768 ~/runs/p1/val/E_plain` | if OK: E capture build + 2048/4096 builds |
 | T10 trn3 script | drafted | `scripts/trn3_bringup.{sh,md}`, `tools/bench_only.py` | review in Q2 |
 | T7–T9, T11 | – | | |

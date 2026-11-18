@@ -176,6 +176,9 @@ Each run is a separate process (`run_job.sh … --skip-compile`, shard-on-load, 
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | 768 | 5 | 10.493 ± 0.082 (10.447–10.639) | 10.291 ± 0.023 (10.269–10.324) | 12.141 ± 0.006 (12.133–12.150) | 11.229 | 10.757 | 12.563 | 0.202 | **−1.648** | **+1.850** | 0.017 |
 | 2048 | 3 | 10.962 ± 0.070 (10.891–11.030) | 10.372 ± 0.096 (10.315–10.482) | 12.327 ± 0.068 (12.253–12.386) | 11.462 | 10.774 | 12.832 | 0.590 | **−1.365** | **+1.955** | 0.083 |
+| 4096 | 3 | 11.116 ± 0.042 (11.085–11.164) | 10.397 ± 0.009 (10.388–10.406) | 12.564 ± 0.008 (12.557–12.573) | 11.677 | 10.800 | 13.107 | 0.719 | **−1.448** | **+2.167** | 0.009 |
+
+(4096 added 17:06 ET; columns "attention B→E" and "fusion E→C" are arithmetic splits only — see Kevin's correction below: fusion's net gain is the "C lead over B" column, 0.20 / 0.59 / 0.72 ms.)
 
 - **Measured:** E (lib MoE + the megakernel's attention stage as 48 separate NKI calls per step) is **1.4–1.6 ms/step slower than B** — close to Phase 0's config D (NxDI's NKI attention block, 12.08 ms at 768 and at 2048, Nov 12): +0.06 ms at 768, +0.25 ms at 2048 (different days). Unfused NKI attention, whichever kernel, costs ~1.5 ms/step on trn2.
 - **Measured:** E's context slope is smaller than B's (768 → 2048: E +0.19, B +0.47, C +0.08 ms), so the NKI attention kernel does remove most of the XLA context cost; C additionally removes E's ~1.9 ms fixed cost.

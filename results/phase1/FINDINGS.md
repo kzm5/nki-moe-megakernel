@@ -158,4 +158,23 @@ E capture build (`traced_E_trn2_229_s768_vcap`, compile 893 s, captures via an i
 | residual, E | 0.0051 | 0.0076 | 0.0092 | 0.0166 | 0.0263 | 0.0418 | 0.0503 | 0.0503 | 0.0508 |
 | residual, B | 0.0052 | 0.0077 | 0.0092 | 0.0163 | 0.0261 | 0.0408 | 0.0479 | 0.0483 | 0.0500 |
 
-- **Measured:** the megakernel's attention stage is at least as accurate as XLA attention where it is first applied (L0 attention 0.0026 vs 0.0028, same input); with lib MoE in both, E's residual error tracks B's within 0–5% at every depth, and both stay below XLA's.
+- **Measured (see T8 below for timing):** the megakernel's attention stage is at least as accurate as XLA attention where it is first applied (L0 attention 0.0026 vs 0.0028, same input); with lib MoE in both, E's residual error tracks B's within 0–5% at every depth, and both stay below XLA's.
+
+## 2026-11-18 01:46–10:37 ET — T8 interleaved B → C → E benchmark, seq 768 and 2048 (Measured; E conditional on its validator verdict)
+
+```bash
+bash tools/chain_q2.sh E_cap E_stats warmup b768 b2048 b4096   # warmup compiled E at 2048 (1,385 s) and 4096 (1,543 s), runs not counted
+python tools/bench_stats.py                                     # -> results/phase1/bench_bce.json
+```
+Each run is a separate process (`run_job.sh … --skip-compile`, shard-on-load, `benchmark_sampling` as in Phase 0); rounds interleaved B, C, E; same session. Builds: B = Phase 0 lib MoE (`traced_xlamoe_…_s768_greedy`, sweep builds at 2048/4096), C = Phase 0 megakernel (`traced_nki_…`), E = `traced_E_trn2_229_s{768,2048,4096}`. TKG latency in ms.
+
+| Seq | n | B p50 | C p50 | E p50 | B p99 | C p99 | E p99 | C lead over B | attention B→E | fusion E→C | pooled std (C, E) |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 768 | 5 | 10.493 ± 0.082 (10.447–10.639) | 10.291 ± 0.023 (10.269–10.324) | 12.141 ± 0.006 (12.133–12.150) | 11.229 | 10.757 | 12.563 | 0.202 | **−1.648** | **+1.850** | 0.017 |
+| 2048 | 3 | 10.962 ± 0.070 (10.891–11.030) | 10.372 ± 0.096 (10.315–10.482) | 12.327 ± 0.068 (12.253–12.386) | 11.462 | 10.774 | 12.832 | 0.590 | **−1.365** | **+1.955** | 0.083 |
+
+- **Measured:** E (lib MoE + the megakernel's attention stage as 48 separate NKI calls per step) is **1.4–1.6 ms/step slower than B** — close to Phase 0's config D (NxDI's NKI attention block, 12.08 ms at 768 and at 2048, Nov 12): +0.06 ms at 768, +0.25 ms at 2048 (different days). Unfused NKI attention, whichever kernel, costs ~1.5 ms/step on trn2.
+- **Measured:** E's context slope is smaller than B's (768 → 2048: E +0.19, B +0.47, C +0.08 ms), so the NKI attention kernel does remove most of the XLA context cost; C additionally removes E's ~1.9 ms fixed cost.
+- **Decision rule (T8):** |C − E| = 1.85 ms (768) and 1.96 ms (2048) vs 2 × pooled std = 0.03 / 0.17 ms → **fusion is not negligible; the fusion share of C's lead over E is ~1.9 ms/step, and the Phase 4 fusion-depth sweep is back in scope.** (Recorded in DAILY.)
+- **Hypothesis (to be split by the T9 profile):** E's 1.9 ms is per-call cost that fusion removes, made of (a) per-layer rebuilds of layer-invariant work that C hoists out of its layer loop (attention mask and permuted cos/sin HBM scratch, built in every E call), (b) kernel-call boundaries that stop XLA from overlapping the next layer's weight DMA with the previous layer's compute, (c) compiler flags (E uses B's TKG −O1, cc-pipeline-tiling 2; C −O3, tiling 4, DMA vectorization). Only (b) is fusion in the narrow sense; (a) is cheap to hoist without fusing layers. The "fusion share" above is therefore an upper bound.
+- Day-to-day: B at 768 is 0.18 ms slower than on Nov 12 (10.31 ± 0.01, pre-sharded weights; today shard-on-load) and C 0.14 ms slower; same-session differences are what count.

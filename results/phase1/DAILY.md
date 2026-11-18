@@ -17,3 +17,4 @@
 - In progress: T8 2048 (round 1: B 10.89, C 10.32, E 12.34), then 4096 (~6 h); then T9 profile of E, T11(b).
 - Decision taken: E's timings are reported although E fails worst_pos as frozen (B fails the same way); labelled conditional. Decision rule at 768 points to "fusion share is real → Phase 4 sweep back in scope", pending 2048; caveat: E pays 48 NKI call boundaries/step and uses B's −O1 flags (C −O3) — T9 profile will split device vs host.
 - Blockers: none. Waiting on you: worst_pos spec decision (FINDINGS "Gate 1", candidate 1); GitHub issues disabled.
+- 10:40 ET addendum — T8 2048 (n=3): B 10.96 ± 0.07, C 10.37 ± 0.10, E 12.33 ± 0.07. **Decision rule applied: |C−E| ≫ 2× pooled std at 768 and 2048 → fusion share ≈1.9 ms recorded; Phase 4 fusion-depth sweep back in scope** (upper bound: part may be hoistable per-call work — T9 profile).

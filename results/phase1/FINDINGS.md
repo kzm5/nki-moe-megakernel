@@ -128,6 +128,27 @@ Flag for Kevin: as frozen, the spec fails the Phase 0 reference config B on one 
 
 **Spec v1.1 adopted (Kevin, 2026-11-18; re-frozen 19:06 UTC / 14:06 ET).** `results/phase1/spec_v1.1.json` = v1.0 plus `gross_requires_top1_change: true`: a worst-position counts only if cand KL > 0.2, base KL < 0.01 **and** cand top-1 ≠ golden top-1. Reason: under v1.0, lib MoE (p60@69) and E (p17@41) each failed on a single near-tie position where they keep golden's top-1 but are more confident, and the "clean" threshold sat on a knife edge (XLA 0.0098 vs 0.01); m1's gross position changes top-1 and stays caught. Timing: decided after the T5/T7 results; all v1.0 numbers above stand as reported under v1.0. Implementation: `validate.py --spec {1.0,1.1}` (default 1.1); `frozen_ok` requires the spec's hash to be one of the frozen versions. Check (Measured): rescoring lib MoE under v1.0 with the new code reproduces the original v1.0 report row for row. v1 freeze kept as `FROZEN_v1.md` / `frozen_v1.json`. Hardening: the freeze records themselves (`frozen*.json`, `FROZEN*.md`) and both specs are now guarded paths; under v1 the guard read an unprotected `frozen.json`, which an agent could have moved to disable it (verified closed: moving `frozen.json` and editing `spec_v1.1.json` are now denied).
 
+## 2026-11-18 18:50 ET — H2.6 (early-finish item): error vs depth for XLA, B, E (Measured)
+
+`python tools/error_budget.py --builds xla=$HOME/runs/p1/val/xla_base B=$HOME/runs/p1/val/libmoe E=$HOME/runs/p1/val/E_cap --corpus … --out results/phase1/error_budget/xla_B_E` (7,200 decode positions each; residual = decoder-layer output, rel-L2 vs fp32 golden).
+
+| Layer | XLA | B | E | B / XLA | E / XLA |
+|---|---|---|---|---|---|
+| 0 | 0.0074 | 0.0052 | 0.0051 | 0.70 | 0.69 |
+| 8 | 0.0203 | 0.0163 | 0.0166 | 0.81 | 0.82 |
+| 16 | 0.0303 | 0.0261 | 0.0263 | 0.86 | 0.87 |
+| 24 | 0.0441 | 0.0408 | 0.0418 | 0.93 | 0.95 |
+| 32 | 0.0526 | 0.0479 | 0.0503 | 0.91 | 0.96 |
+| 36 | 0.0654 | 0.0670 | 0.0697 | 1.03 | 1.07 |
+| 40 | 0.0521 | 0.0483 | 0.0503 | 0.93 | 0.97 |
+| 47 | 0.0510 | 0.0500 | 0.0508 | 0.98 | 1.00 |
+| peak (layer) | 0.0681 (L34) | 0.0758 (L33) | 0.0794 (L33) | | |
+
+- **Measured:** the NKI MoE builds start with ~30% less residual error than XLA (lib MoE's layer-0 MoE output: 0.0107 vs 0.0165), and the advantage decays with depth: B/XLA 0.70 → 0.98 and E/XLA 0.69 → 1.00 by L47. Per-layer error injected by later layers is similar across builds and dominates the early difference.
+- **Measured:** all three builds peak at L33–34 and then **damp** by 25–36% to L47; final-layer residual errors are within 2% of each other (0.050–0.051), consistent with the near-1 KL ratios.
+- **Measured:** E's residual error is 0–5% above B's at every depth (largest around L32–36), the only accuracy cost of the standalone attention kernel.
+- **Hypothesis:** the post-L34 damping reflects late layers (L37 attention, L33 MoE are the largest single-block errors) writing contributions that partly cancel accumulated error in the residual direction; testable by projecting per-layer error onto the residual.
+
 ## 2026-11-18 17:32–17:50 ET — T9 profile of config E, seq 768 (Measured)
 
 ```bash

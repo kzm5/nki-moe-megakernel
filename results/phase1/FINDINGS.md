@@ -125,3 +125,25 @@ Candidate rows (not added to the frozen spec):
 3. **Per-layer router Δ**: catches m4 sharply (+69.7 pp at L24; lib MoE's per-layer max Δ is 0.00 pp), but at 0.5 pp per layer it would also fail the control m3 (+0.79 pp at L19) and m1 (+0.94 pp at L32) — sampling noise at ~7,200 positions per layer is ~0.3–0.5 pp; a per-layer gate needs a larger threshold (e.g. 5 pp).
 
 Flag for Kevin: as frozen, the spec fails the Phase 0 reference config B on one position; the decision (keep, or adopt candidate 1 in a new spec version) is his.
+
+## 2026-11-17 21:15–22:00 ET — T6 config E built; T7 validator on E (production build) (Measured)
+
+E = XLA + library MoE kernel + the megakernel's TKG attention stage per layer, unfused. Code (new files only, no kernel edits): `megakernels/qwen3_moe/attn_e_nki.py` (one `nki.jit` kernel per layer: shard-interleaved X load, vendored `nki_kernels._legacy.attention.attention_block_tkg` with fused input RMSNorm, pre-RoPE QK RMSNorm, RoPE, in-place K/V update at `position_ids`, output projection, `_sb2sb_all_reduce_gather`; helpers imported from `transformer_qwen3_moe_speculative.py`, the module build C uses) and `megakernels/qwen3_moe/qwen_attn_e.py` (subclass of `qwen.py`: TKG self-attention dispatches the kernel, residual adds and the MoE block stay in XLA; weight conversion adds the megakernel's rank-grouped fused QKV and Wo^T; neuron-config flags as the megakernel: `attn_tkg_nki_kernel_enabled`, `attn_block_tkg_nki_kernel_cache_update`; compiler flags = `qwen.py`'s (B's) + `--enable-verifier=false` for the in-place KV scatter). Selected with `--qwen megakernels.qwen3_moe.qwen_attn_e --moe-fused-nki-kernel-enabled` (validator kind `E`). `main.py` needed no change (`--qwen` already selects a module).
+
+- **Compiled on the first attempt** (884 s; all HLOs PASS) and loaded (1,099 s incl. shard-on-load). Time-box used: ~1 h of 10.
+- Note (Hypothesis, confound for T8): E uses B's compiler flags (TKG `-O1`, `cc-pipeline-tiling-factor=2`); C uses its own (`-O3`, tiling 4, extra DMA vectorization). C − E therefore mixes fusion with compiler-flag effects.
+
+Frozen validator on E (production build, logits rows; op-boundary/router pending the E capture build):
+
+| | E | C megakernel | B lib MoE | XLA |
+|---|---|---|---|---|
+| Verdict | **fail** (worst_pos) | pass | fail (worst_pos) | – |
+| mean KL vs golden (ratio to XLA) | 2.185e-3 (**0.967**) | 2.172e-3 (0.961) | 1.967e-3 (0.871) | 2.260e-3 |
+| top-1 = golden | 98.65% | 98.73% | 98.68% | 98.65% |
+| gross positions | **1 (p17@41)** | 0 | 1 (p60@69) | – |
+| perplexity (Δ vs XLA) | 8.397 (+0.05%) | 8.385 (−0.10%) | 8.379 (−0.17%) | 8.393 |
+| run-to-run | bit-identical (64/64) | bit-identical | bit-identical | bit-identical |
+
+E's gross position p17@41 is a two-way near tie in golden ("," 0.60 / " line" 0.40). Every build keeps golden's top-1: XLA KL 0.0011 (0.62); lib MoE, megakernel and the benign control m3 all 0.129 (0.82); E 0.328 (0.905). It is the position Phase 0 called "the largest NKI-specific KL, shared by both builds". Same pattern as B's p60@69; candidate worst-pos row 1 (top-1 must change) would clear both.
+
+**Decision taken (rule interpretation, for Kevin):** T7 says E must pass before any timing claim. As frozen, E fails — and so does the reference config B — on a single same-top-1 position. T8 measurements proceed; every E timing claim is labelled "conditional on the validator verdict (fails worst_pos on 1 same-top-1 position)".

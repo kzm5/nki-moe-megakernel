@@ -128,6 +128,23 @@ Flag for Kevin: as frozen, the spec fails the Phase 0 reference config B on one 
 
 **Spec v1.1 adopted (Kevin, 2026-11-18; re-frozen 19:06 UTC / 14:06 ET).** `results/phase1/spec_v1.1.json` = v1.0 plus `gross_requires_top1_change: true`: a worst-position counts only if cand KL > 0.2, base KL < 0.01 **and** cand top-1 ≠ golden top-1. Reason: under v1.0, lib MoE (p60@69) and E (p17@41) each failed on a single near-tie position where they keep golden's top-1 but are more confident, and the "clean" threshold sat on a knife edge (XLA 0.0098 vs 0.01); m1's gross position changes top-1 and stays caught. Timing: decided after the T5/T7 results; all v1.0 numbers above stand as reported under v1.0. Implementation: `validate.py --spec {1.0,1.1}` (default 1.1); `frozen_ok` requires the spec's hash to be one of the frozen versions. Check (Measured): rescoring lib MoE under v1.0 with the new code reproduces the original v1.0 report row for row. v1 freeze kept as `FROZEN_v1.md` / `frozen_v1.json`. Hardening: the freeze records themselves (`frozen*.json`, `FROZEN*.md`) and both specs are now guarded paths; under v1 the guard read an unprotected `frozen.json`, which an agent could have moved to disable it (verified closed: moving `frozen.json` and editing `spec_v1.1.json` are now denied).
 
+**Rescore of every build under v1.0 and v1.1 (17:06–17:32 ET, Measured; `tools/chain_q2b.sh rescore` → `results/phase1/reports_v10/`, `reports_v11/`; all `frozen_ok: true`).** m1–m3's per-layer captures were deleted for disk before the rescore, so their router row reads "not measurable"; it is identical under both versions and carries over from the original v1.0 reports (m1 +0.10 pp pass, m2 +80.1 pp fail, m3 +0.07 pp pass).
+
+| Build | v1.0 verdict (failed rows) | v1.1 verdict (failed rows) | gross v1.0 → v1.1 |
+|---|---|---|---|
+| XLA 2nd process | pass | pass | 0 → 0 |
+| m1 bf16 down-proj accumulation | fail (worst_pos) | **fail (worst_pos)** | 1 → 1 (p47@3 changes top-1) |
+| m2 no renormalization | fail (all; router carried over) | **fail** (all) | 2,761 → 1,373 |
+| m3 reordered sum (control) | pass | **pass** | 0 → 0 |
+| m4 8th→9th expert at L24 | fail (router) | **fail (router)** | 0 → 0 |
+| B lib MoE | fail (worst_pos) | **pass** | 1 → 0 |
+| C megakernel | pass | **pass** (op-boundary/router not measurable) | 0 → 0 |
+| E (production build) | fail (worst_pos) | **pass** (op-boundary/router not measurable) | 1 → 0 |
+| E (capture build) | fail (worst_pos) | **pass** (all rows measured) | 1 → 0 |
+
+- **Gate 1 stays met under v1.1** (XLA passes vs itself; m1, m2, m4 caught by the same rows; m3 passes).
+- B, C and E all pass the frozen v1.1 validator; **T7 is satisfied, so E's T8 timings are no longer conditional.**
+
 Incident (14:20 ET, Measured): the required `git pull --rebase mine phase0/trn2-setup` (remote had one new commit, RESEARCH_PLAN rev 35) failed with "unable to unlink tools/validator/validate.py: Permission denied" — a rebase must rewrite files in the read-only validator directory — and left the working tree half-switched to the remote tip (my commit `96e49f2` intact). Recovery without touching the freeze: verified the working-tree changes were byte-identical to the remote tip, stashed the non-frozen ones (`q1q2-stale-remote-tip-snapshot-20261118`, `5848957e`), merged instead of rebasing (`git pull --no-rebase`, merge `3cb5c40`; only `docs/RESEARCH_PLAN.md` came in; push fast-forward). The guard correctly refused to let me rewrite the two frozen records on disk; local `results/phase1/FROZEN.md` / `FROZEN_v1.md` are stale copies (the committed versions are correct) and are never staged. **Rule conflict for Kevin:** with a read-only validator, `git pull --rebase` fails whenever local commits touch frozen files; merge pulls (or rebasing only when no local commit touches them) are needed.
 
 ## 2026-11-17 21:15–22:00 ET — T6 config E built; T7 validator on E (production build) (Measured)

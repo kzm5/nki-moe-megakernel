@@ -1,7 +1,7 @@
 """Append one ledger entry per validator report: ledger_reports.py TASK NAME..."""
 import json, os, subprocess, sys, time
 
-R = os.path.expanduser("~/runs/p1/reports")
+R = os.path.expanduser(os.environ.get("REPORTS", "~/runs/p1/reports"))
 WT = os.path.expanduser("~/nki-moe-megakernel/.claude/worktrees/q1q2")
 task = sys.argv[1]
 sha = subprocess.run(["git", "-C", WT, "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip()
@@ -10,7 +10,7 @@ with open(os.path.expanduser("~/runs/ledger.jsonl"), "a") as f:
         r = json.load(open(f"{R}/{b}.json"))
         rows = r["rows"]
         ob = rows["op_boundary"].get("per_boundary", {})
-        e = {"run_id": f"p1_validate_{b}_{time.strftime('%Y%m%d', time.gmtime())}", "timestamp": r["scored_utc"],
+        e = {"run_id": f"p1_validate{os.environ.get('TAG', '')}_{b}_{time.strftime('%Y%m%d', time.gmtime())}", "timestamp": r["scored_utc"],
              "git_sha": sha, "kind": "validator", "phase": 1, "task": task, "setup": b,
              "config": r["cand_device"], "report": f"{R}/{b}.json",
              "validator": {"pass": r["pass"], "rows_failed": r["rows_failed"], "rows_not_measurable": r["rows_not_measurable"],

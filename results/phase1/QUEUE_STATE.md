@@ -31,3 +31,24 @@ Updated: 2026-11-19 00:20 ET. **Q1, Q2 and the early-finish items (H2.6, H2.2) d
 
 ## Builds (`~/qwen-30b-a3b/`)
 XLA `traced_xla_trn2_229_s768_greedy` (production), `…_vcap` (validator capture), `…_vcap_m1` (m1); lib MoE `traced_xlamoe_trn2_229_s768_greedy`, `…_vcap`; megakernel `traced_nki_trn2_229_s768_greedy`; E `traced_E_trn2_229_s{768,2048,4096}`, `…_s768_vcap`; N `traced_Bnull_trn2_229_s768`; F `traced_Ecflags_trn2_229_s768`; sweep builds 256–4096; config D 768/2048. Validator outputs `~/runs/p1/val/<build>/`.
+
+# Q3 queue state (queue: `docs/queues/Q3.md`, read-only; Nov 19–27)
+
+Updated: 2026-11-19 10:45 ET. Checkpoint `SUMMARY_Q3_mid.md` due Sun Nov 22 12:00 ET; Q3 done Fri Nov 27 12:00 ET.
+
+## Environment
+- Results worktree `.claude/worktrees/q3` (branch `worktree-q3`; `git pull --no-rebase mine phase0/trn2-setup`, then `git push mine HEAD:phase0/trn2-setup`). Kernel work: worktrees on `q3/<task>` branches, pushed to `mine`, never merged here.
+- Jobs: `MK_DIR=<worktree> ~/runs/run_py.sh …` / `run_job.sh`; frozen validator is run from the q1q2 worktree.
+
+## Tasks
+| Task | Status | Paths |
+|---|---|---|
+| Start of session | done Nov 19 10:45 | FINDINGS "Q3 state on start"; CLAUDE.md reading list → Q3 |
+| T1 fix skills | pending | |
+| T2.1 fp32 router emulation | pending | |
+| T2.2 fp32 router kernel | pending (decision rule after T2.1) | |
+| T3.1 E vs C attribution | pending | |
+| T3.2 E-copy changes | pending | |
+| T4 agent study A1/C1(/A2/C2) | pending | |
+| Mid summary | due Nov 22 12:00 | |
+| Wrap-up | due Nov 27 12:00 | |

@@ -1,6 +1,6 @@
 ## Session rules
 
-- At session start, read in order: `docs/queues/Q1Q2.md` (current queue, read-only), `docs/RESEARCH_PLAN.md` (snapshot; master copy is the user's Claude doc, don't edit it here), `results/phase1/QUEUE_STATE.md`, `results/phase1/FINDINGS.md`, `results/phase1/DAILY.md`, `results/phase0/RESUME.md`, `results/phase1/ledger.jsonl`.
+- At session start, read in order: `docs/queues/Q3.md` (current queue, read-only; Q1+Q2 done: `docs/queues/Q1Q2.md`), `docs/RESEARCH_PLAN.md` (snapshot; master copy is the user's Claude doc, don't edit it here), `results/phase1/QUEUE_STATE.md`, `results/phase1/FINDINGS.md`, `results/phase1/DAILY.md`, `results/phase0/RESUME.md`, `results/phase1/ledger.jsonl`.
 - Use `~/venv-neuron-229` (SDK 2.29) with nkilib fork branch `2.29_release`.
 - Run only one compile or device job at a time. Host RAM peaks around 121 GiB of 124; there is a 64 GB swapfile.
 - `--seq-len` must be a multiple of 256 at LNC=2.

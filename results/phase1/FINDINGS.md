@@ -1,6 +1,14 @@
 # Phase 1 findings (lab notebook, Q1+Q2 onward)
 
-Queue: [`docs/queues/Q1Q2.md`](../../docs/queues/Q1Q2.md). State: [`QUEUE_STATE.md`](QUEUE_STATE.md). Ledger: `~/runs/ledger.jsonl` → [`ledger.jsonl`](ledger.jsonl). Times ET unless marked UTC.
+Queue: [`docs/queues/Q1Q2.md`](../../docs/queues/Q1Q2.md). State: [`QUEUE_STATE.md`](QUEUE_STATE.md). Ledger: `~/runs/ledger.jsonl` → [`ledger.jsonl`](ledger.jsonl). Times ET unless marked UTC. Q3 (Nov 19–27, [`docs/queues/Q3.md`](../../docs/queues/Q3.md)): newest Q3 entries directly below.
+
+## 2026-11-19 10:40 — Q3 state on start (Measured)
+
+- Commit `5f2c1b4` (remote tip of `phase0/trn2-setup`); worktree `.claude/worktrees/q3` (branch `worktree-q3`, pushed as `HEAD:phase0/trn2-setup`); the frozen validator stays in `.claude/worktrees/q1q2` and runs from there.
+- No device or CPU job running; `neuron-ls` idle (1 device, 4 logical cores, LNC=2). RAM 120 GiB available of 124.
+- Disk: **42 GB free** of 484 GB (92% used). Kernel-variant compiles will need deletions; Kevin approves from a `du` list.
+- Builds present (`~/qwen-30b-a3b/`): XLA s768 production/vcap/vcap_m1; B s768 production/vcap/router; C s768 + sweeps 256–4096; E s768/2048/4096 + s768_vcap; N; F; config D 768/2048. Profiles: E s768 (983 MB NTFFs), B/C/D s768, B/C s2048.
+- H2.2 done (Nov 19 00:10 ET; `h22.json`): bf16 expert-GEMM inputs = 30% of XLA's KL, bf16 accumulation 44%; `tools/h22_accum.py` is the base for T2.1.
 
 ## 2026-11-17 11:05 — State on start (Measured)
 

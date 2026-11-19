@@ -53,5 +53,7 @@ Updated: 2026-11-19 12:55 ET. Checkpoint `SUMMARY_Q3_mid.md` due Sun Nov 22 12:0
 | Mid summary | due Nov 22 12:00 | |
 | Wrap-up | due Nov 27 12:00 | |
 
-## Pending deletions (need Kevin's approval)
-- Job-scratch per-instruction JSONs E/C/Eh (~4.2 GB) in `~/.claude/jobs/25305f18/tmp/`; disk 29 GB free on Nov 19 12:45 ET.
+## Disk and loading (Kevin, Nov 19 13:20 ET)
+- Filesystem grown to 678 GB (223 GB free); keep the per-instruction JSONs (deletion request withdrawn).
+- Root EBS stays at 3,000 IOPS: avoid swap. Pre-shard C (`traced_nki_trn2_229_s768_greedy`, the build loaded most in Q3) with `~/runs/val/preshard.py` after the T3 bench; load pre-sharded builds with `--save-sharded-checkpoint --skip-sharding` (the first makes NxDI read `weights/`). The frozen `device.py` cannot pass these flags, so validator loads still shard on load (page cache pre-warmed first).
+- Baseline for the next validator load: Eh's load took 2,537 s (42 min; the 57 min reported earlier included the 888 s compile).

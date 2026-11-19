@@ -48,9 +48,10 @@ say "VALIDATOR v1.1: $pass"
   python3 -c "
 import json; r=json.load(open('$HOME/runs/p1/val/agent_${run}_$it/report.json'))
 for k,v in r.get('rows',{}).items(): print(' ',k, json.dumps({a:b for a,b in v.items() if not isinstance(b,list)})[:400])" >> $fb 2>&1; }
-# benchmark (n=2, separate processes)
+# benchmark (n=2, separate processes); pre-sharded weights/ load without the sharding RAM peak
+PRESH=(); [ -d $cdir/weights ] && PRESH=(--save-sharded-checkpoint --skip-sharding)
 for r in 1 2; do
-  MK_DIR=$wt MK_AGENT_VARIANT=1 bash ~/runs/run_job.sh ${name}_b$r $cdir "${FLAGS[@]}" --skip-compile > /dev/null 2>&1
+  MK_DIR=$wt MK_AGENT_VARIANT=1 bash ~/runs/run_job.sh ${name}_b$r $cdir "${FLAGS[@]}" "${PRESH[@]}" --skip-compile > /dev/null 2>&1
   bash ~/runs/ledger_bench.sh ${name}_b$r 768 "agent-$run-$it" "Q3 T4 $setup $run iter $it" > /dev/null 2>&1
 done
 echo "$(ts) benched" >> $d/times

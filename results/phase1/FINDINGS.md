@@ -128,6 +128,24 @@ Flag for Kevin: as frozen, the spec fails the Phase 0 reference config B on one 
 
 **Spec v1.1 adopted (Kevin, 2026-11-18; re-frozen 19:06 UTC / 14:06 ET).** `results/phase1/spec_v1.1.json` = v1.0 plus `gross_requires_top1_change: true`: a worst-position counts only if cand KL > 0.2, base KL < 0.01 **and** cand top-1 ≠ golden top-1. Reason: under v1.0, lib MoE (p60@69) and E (p17@41) each failed on a single near-tie position where they keep golden's top-1 but are more confident, and the "clean" threshold sat on a knife edge (XLA 0.0098 vs 0.01); m1's gross position changes top-1 and stays caught. Timing: decided after the T5/T7 results; all v1.0 numbers above stand as reported under v1.0. Implementation: `validate.py --spec {1.0,1.1}` (default 1.1); `frozen_ok` requires the spec's hash to be one of the frozen versions. Check (Measured): rescoring lib MoE under v1.0 with the new code reproduces the original v1.0 report row for row. v1 freeze kept as `FROZEN_v1.md` / `frozen_v1.json`. Hardening: the freeze records themselves (`frozen*.json`, `FROZEN*.md`) and both specs are now guarded paths; under v1 the guard read an unprotected `frozen.json`, which an agent could have moved to disable it (verified closed: moving `frozen.json` and editing `spec_v1.1.json` are now denied).
 
+## 2026-11-18 17:45 → 22:50 ET — T8b: per-call boundary cost and compiler flags, seq 768 (Measured)
+
+Added by Kevin (Nov 18). N = B + one null NKI kernel per layer on TKG (`megakernels/qwen3_moe/null_nki.py`: identity copy of the attention output HBM → SBUF → HBM with E's load/store layout, LNC=2 sharding and core barrier; `qwen_null_nki.py`; compile 1,002 s). F = E compiled with C's compiler flags (`qwen_attn_e_cflags.py` → `NeuronQwen3MoeForCausalLMV3.get_compiler_args`: TKG −O3, cc-pipeline-tiling 4, DMA vectorization; compile 871 s). `tools/bench_t8b.sh rounds 3`: interleaved B → C → E → N → F, separate processes, same session; 15 runs, all EXIT 0. → `results/phase1/bench_t8b.json`.
+
+| Config | p50 TKG (ms) | range | p99 (ms) |
+|---|---|---|---|
+| B lib MoE | 10.521 ± 0.086 | 10.445–10.614 | 11.294 ± 0.144 |
+| C megakernel | 10.358 ± 0.088 | 10.266–10.441 | 10.919 ± 0.229 |
+| E (megakernel attention, unfused) | 12.215 ± 0.069 | 12.141–12.279 | 12.759 ± 0.197 |
+| **N = B + 48 null NKI calls** | **10.690 ± 0.039** | 10.665–10.736 | 11.484 ± 0.056 |
+| **F = E with C's flags** | **12.179 ± 0.038** | 12.144–12.218 | 12.721 ± 0.185 |
+
+- **Measured:** the bare NKI call boundary costs N − B = **+0.169 ms/step** (2 × pooled std 0.133), i.e. **≈ 3.5 µs per call** (48 calls), **10% of E's +1.69 ms**. Kevin's condition ("(i) accounts for most of E's penalty") is **not met**: the trn2 fusion mechanism is not call-boundary cost.
+- **Measured:** C's compiler flags do not change E (F − E = −0.036 ms, within 2 × pooled std 0.112).
+- **Measured (with T9):** the remaining ~1.5 ms/step (≈ 31 µs/layer) is device work of the attention stage when it runs as its own kernel: per T9, +14–17 µs DMA, +13 µs vector, +6 µs collectives and 1.7× B's spill per layer, against −18 µs scalar. Inside the megakernel the same stage costs ~39 µs/layer less (C ≈ B).
+- **Hypothesis (what fusion saves on trn2, to test next):** state the standalone kernel must rebuild on every call — weights and layer-invariant constants loaded into SBUF per call, the mask and permuted RoPE scratch rebuilt per call (C hoists them out of its layer loop), and its own all-reduce-gather — rather than the boundary itself. A standalone E with the mask/RoPE build hoisted to one call per step would isolate the hoisting share; that needs a kernel-file change (Q3, needs approval).
+- Same-session drift: B 10.52 here vs 10.49 in T8 the previous evening; C 10.36 vs 10.29.
+
 ## 2026-11-18 18:50 ET — H2.6 (early-finish item): error vs depth for XLA, B, E (Measured)
 
 `python tools/error_budget.py --builds xla=$HOME/runs/p1/val/xla_base B=$HOME/runs/p1/val/libmoe E=$HOME/runs/p1/val/E_cap --corpus … --out results/phase1/error_budget/xla_B_E` (7,200 decode positions each; residual = decoder-layer output, rel-L2 vs fp32 golden).

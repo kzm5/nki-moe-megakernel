@@ -1,0 +1,18 @@
+{
+ "(4, 128, 512)": {
+  "dtype": "torch.bfloat16",
+  "bit_identical": true,
+  "mismatches": 0,
+  "max_abs_vs_ref_orig": 0.578125,
+  "us_per_call_orig": 622.4155426025391,
+  "us_per_call_opt": 624.9237060546875
+ },
+ "(8, 128, 2048)": {
+  "dtype": "torch.bfloat16",
+  "bit_identical": true,
+  "mismatches": 0,
+  "max_abs_vs_ref_orig": 0.5,
+  "us_per_call_orig": 604.0716171264648,
+  "us_per_call_opt": 611.271858215332
+ }
+}

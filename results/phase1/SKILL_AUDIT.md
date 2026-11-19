@@ -13,7 +13,8 @@ although iterations are independent. A fresh subagent ran the skill with no hint
 | Planted flaw 2 (sequential loop) | **found** (Measured): changed to `affine_range` |
 | Extra change | both input loads hoisted to the top of the loop body |
 | Output bit-identical | yes under `nki.simulate` at 3 shapes (Measured) — weak evidence: the simulator computes and returns fp32 and does not round at bf16 intermediates (verified independently: max error vs an fp32 reference is exactly 0) |
-| Speed-up | not measured (device busy); on-device benchmark + bf16 bit-identity pending |
+| On-device bf16 bit-identity (Nov 18 23:05 ET, `tests/skill_audit/device_check.py`, torch-xla, one NeuronCore) | **bit-identical** at [4,128,512] and [8,128,2048] (0 mismatches; Measured) |
+| Speed-up | not resolved: wall time per call 622 vs 625 µs and 604 vs 611 µs (orig vs opt) is dominated by per-call dispatch (`mark_step` each call); a device profile of the two NEFFs is needed to see the kernel-level effect |
 | Followed the skill's loop | no: profiling, benchmarking and the N-plan rounds all need the device |
 
 Errors in the skill found by the audit (each verified against the installed SDK 2.29 / NKI 0.3, Measured):
@@ -54,5 +55,5 @@ Errors in the skill (verified against the skill text; values from the subagent's
 Missed by the skill: multiple per-rank NTFFs and the rank-skew effect on `cc_op_time`; LNC=2 (one NTFF = two physical cores; summary engine times are their union, counts their sum); wall-clock attribution by merging intervals per source; the large no-source bucket.
 
 ## Verdicts (T11)
-- **nki-kernel-optimizer (trn2):** right on the planted case (found both flaws, kept simulated output identical); wrong in 3 checked API/environment facts (`hw_dge`, `platform_target=`, venv path); misses that `nki.simulate` skips bf16 rounding; still carries trn3-only MX ops in its quick reference. On-device bit-identity/speed of the optimized kernel not yet measured.
+- **nki-kernel-optimizer (trn2):** right on the planted case (found both flaws, kept simulated output identical); wrong in 3 checked API/environment facts (`hw_dge`, `platform_target=`, venv path); misses that `nki.simulate` skips bf16 rounding; still carries trn3-only MX ops in its quick reference. On device the optimized kernel is bf16 bit-identical; its speed-up is not resolved by wall time (dispatch-bound).
 - **neuron-profile:** numbers right (identical to our tool); method guidance wrong on units, clock, CC-core id and output size, and silent on multi-rank skew and LNC=2 — the two things that decide which numbers to trust on this box.

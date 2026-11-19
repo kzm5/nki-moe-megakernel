@@ -1,5 +1,13 @@
 # Resuming Phase 0 on a fresh instance from this image
 
+## Phase 1 update (2026-11-18, Q1+Q2 done) — read this first
+- State: `results/phase1/QUEUE_STATE.md`, `SUMMARY_Q1Q2.md`, `FINDINGS.md`, `DAILY.md`. Worktree `.claude/worktrees/q1q2`; pull with `git pull --no-rebase mine phase0/trn2-setup` (rebase fails on the read-only validator); `*.json` needs `git add -f`.
+- **Pre-read the lazily restored volume first** (serial reads ran at 13 MB/s, 16 parallel at ~95 MB/s): `bash tools/preread.sh ~/qwen-30b-a3b/hf_model ~/runs/p1/golden ~/runs/p1/refs <build dirs>`. With hydrated blocks a plain build loads in ~3–5 min.
+- Validator (frozen; spec v1.1 default): device capture `python tools/validator/device.py KIND CDIR OUT --corpus results/phase1/corpus/corpus.json --refs ~/runs/p1/refs --tf --ppl --repeat [--capture]` (kinds xla, libmoe, nki, E); golden stats `python tools/validator/golden.py --corpus … --refs ~/runs/p1/refs --out <tmp> --stats NAME=OUT …`; score `python tools/validator/validate.py score --cand OUT [--spec 1.0|1.1] --out report.json`. Baselines: `~/runs/p1/val/xla_base` (capture), `~/runs/p1/val/xla_plain` (production).
+- Capture gotchas: NxD module capture yields one tensor per module (first output); for `self_attn` that is not the attention output → capture `self_attn.o_proj`; prefill outputs are sequence-sharded → score decode steps only; patch `TensorRegistry.clear` at trace time; the capture build differs from production XLA at the 512 prefill bucket.
+- Benchmarks: `tools/bench_bce.sh`, `tools/bench_t8b.sh` (interleaved, separate processes), stats `tools/bench_stats.py`. Config E: `--moe-fused-nki-kernel-enabled --qwen megakernels.qwen3_moe.qwen_attn_e`.
+- Guard hook in `~/.claude/settings.json` denies edits to frozen paths (also blocks Bash commands that mention them together with `>`/`cp`/…; use the Edit tool and `git commit -F`). Deletions need Kevin's approval with a `du` list.
+
 State as of 2026-11-12 ~22:45 ET (Day 3b done). Branch `phase0/trn2-setup` on remote `mine` (`https://github.com/kzm5/nki-moe-megakernel.git`). Read first: `.claude/CLAUDE.md` (Session rules), `docs/RESEARCH_PLAN.md`, `results/phase0/SUMMARY_DAY3.md`, `FINDINGS.md` (latest "Day 3" sections), `ledger.jsonl`.
 
 ## Software

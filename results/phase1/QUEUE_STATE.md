@@ -1,28 +1,33 @@
 # Q1+Q2 queue state (source of truth; queue: `docs/queues/Q1Q2.md`, read-only)
 
-Updated: 2026-11-17 14:15 ET. Deadlines: Q1 Thu Nov 19 12:00 ET, Q2 Sun Nov 22 12:00 ET.
+Updated: 2026-11-18 23:30 ET. **Q1 and Q2 done** (deadlines Thu Nov 19 12:00 / Sun Nov 22 12:00). Summary: `SUMMARY_Q1Q2.md`. Device idle.
 
 ## Environment
-- Worktree `~/nki-moe-megakernel/.claude/worktrees/q1q2` (branch `worktree-q1q2`), push `git push mine HEAD:phase0/trn2-setup` after `git pull --no-rebase mine phase0/trn2-setup` (rule changed Nov 18; merge commits are fine).
-- Device/CPU jobs: `~/runs/run_py.sh NAME script args…` (cds to this worktree; log `~/runs/NAME.log`). Ledger `~/runs/ledger.jsonl` → `results/phase1/ledger.jsonl`.
-- Phase-1 data: `~/runs/p1/` (`refs/`, `golden/` frozen; `val/<run>/` device outputs + `stats.pt`; `src_wikitext/`).
-- Frozen validator: `results/phase1/FROZEN.md`; guard hook in `~/.claude/settings.json` (denies edits of frozen paths; use Edit tool / `git commit -F`).
-- Device chain: `~/runs/p1/chain_q1.sh JOB…` (jobs xla_self m1 m2 m3 m4 libmoe nki libmoe_plain), log `~/runs/p1/chain_q1.log`.
+- Worktree `~/nki-moe-megakernel/.claude/worktrees/q1q2` (branch `worktree-q1q2`); before every push `git pull --no-rebase mine phase0/trn2-setup`, then `git push mine HEAD:phase0/trn2-setup` (rule changed Nov 18; merges fine).
+- `*.json` is gitignored: add result JSONs with `git add -f`.
+- Jobs: `~/runs/run_py.sh NAME script args…` (cds to this worktree), `~/runs/run_job.sh` (benchmarks), `~/runs/prof/run_prof.sh` (profiles; kind E added). Ledger `~/runs/ledger.jsonl` → `results/phase1/ledger.jsonl`.
+- Frozen validator: `results/phase1/FROZEN.md` (spec v1.0 + v1.1; default 1.1), guard hook in `~/.claude/settings.json`. Deleting anything: show Kevin a `du` list first.
 - Status lines: `results/phase1/STATUS.md` (GitHub issues disabled on the repo).
 
 ## Tasks
-| Task | Status | Commands / paths | Next step |
-|---|---|---|---|
-| Start of session | done 11:30 | CLAUDE.md updated; FINDINGS "State on start" | – |
-| T1 restore | **done** 11:45: XLA bit-identical 24/24; refs `~/runs/p1/refs` (64) | `p1_xla_plain` | – |
-| T2 validator | **frozen** 14:06 ET (19:06 UTC); hook verified | `tools/validator/`, `spec.json`, `FROZEN.md` | – |
-| T3 corpus + golden | **done**: 64 prompts, 16×512 ppl, golden 81 files | `~/runs/p1/golden` | – |
-| T4 error budget | **done** (XLA, all buckets) | `results/phase1/error_budget/xla.{json,csv}` | add B/E for H2.6 later |
-| T5 mutants + Gate 1 | **done** 21:20 ET: Gate 1 met; B fails worst_pos (1 position), C passes | reports `~/runs/p1/reports/*.json`; `summarize_reports.py`; FINDINGS "Gate 1" | Kevin: decide on candidate worst-pos row |
-| T6 E | first compile + validator run started 21:15 ET (time-box 10 h → 07:15 ET) | `p1_E_plain`: `device.py E ~/qwen-30b-a3b/traced_E_trn2_229_s768 ~/runs/p1/val/E_plain` | if OK: E capture build + 2048/4096 builds |
-| Spec v1.1 (Kevin, Nov 18) | **re-frozen** 14:06 ET (v1.0 kept); validator `--spec {1.0,1.1}` default 1.1 | `spec_v1.1.json`, `FROZEN.md`, `FROZEN_v1.md` | rescore all builds under both after T8 4096 → `~/runs/p1/reports_v1/`, `reports_v11/` |
-| T8 | 768 + 2048 done; 4096 running (chain_q2) | `tools/bench_bce.sh`, `tools/bench_stats.py` → `results/phase1/bench_bce.json` | correction recorded: fusion net gain = C vs B; sweep not in scope |
-| T9 profile E @768 | after T8 4096 | `~/runs/prof/run_prof.sh p1_prof_E_s768 E ~/qwen-30b-a3b/traced_E_trn2_229_s768 768` | Table-5 format vs Phase 0 libmoe/nki tables |
-| T8b (Kevin, Nov 18) | code written: N = B + null NKI kernel per layer (`null_nki.py`, `qwen_null_nki.py`), F = E with C's flags (`qwen_attn_e_cflags.py`) | `tools/bench_t8b.sh warmup; rounds 3` (B,C,E,N,F at 768) | after T9 |
-| T10 trn3 script | drafted | `scripts/trn3_bringup.{sh,md}`, `tools/bench_only.py` | review in Q2 |
-| T7–T9, T11 | – | | |
+| Task | Status | Paths |
+|---|---|---|
+| Start of session | done Nov 17 11:30 | FINDINGS "State on start" |
+| T1 restore | done: XLA bit-identical 24/24 | `~/runs/p1/refs` (64 refs) |
+| T2 validator | frozen v1.0 Nov 17 14:06; v1.1 Nov 18 14:06 | `tools/validator/`, `spec.json`, `spec_v1.1.json`, `FROZEN.md` |
+| T3 corpus + golden | done | `results/phase1/corpus/corpus.json`, `~/runs/p1/golden` |
+| T4 XLA error budget | done | `results/phase1/error_budget/xla.{json,csv}` |
+| T5 mutants, Gate 1 | done: met (v1.0 and v1.1) | `results/phase1/reports_v10/`, `reports_v11/` |
+| T6 E | done (first compile) | `megakernels/qwen3_moe/{attn_e_nki,qwen_attn_e}.py` |
+| T7 validator on E | done: passes v1.1 | `reports_v11/E_*.json` |
+| T8 B/C/E | done (768/2048/4096) | `results/phase1/bench_bce.json` |
+| T8b null-kernel / C-flags | done | `results/phase1/bench_t8b.json`; `null_nki.py`, `qwen_null_nki.py`, `qwen_attn_e_cflags.py` |
+| T9 profile E | done | `results/phase1/E_s768.json`, `~/runs/prof/p1_prof_E_s768` (983 MB raw) |
+| T10 trn3 script | written, not run | `scripts/trn3_bringup.{sh,md}`, `tools/bench_only.py` |
+| T11 skill audit | done | `results/phase1/SKILL_AUDIT.md`, `tests/skill_audit/` |
+| H2.6 | done | `results/phase1/error_budget/xla_B_E.{json,csv}` |
+| H2.2 | not started | – |
+| Wrap-up | SUMMARY_Q1Q2 written | – |
+
+## Builds (`~/qwen-30b-a3b/`)
+XLA `traced_xla_trn2_229_s768_greedy` (production), `…_vcap` (validator capture), `…_vcap_m1` (m1); lib MoE `traced_xlamoe_trn2_229_s768_greedy`, `…_vcap`; megakernel `traced_nki_trn2_229_s768_greedy`; E `traced_E_trn2_229_s{768,2048,4096}`, `…_s768_vcap`; N `traced_Bnull_trn2_229_s768`; F `traced_Ecflags_trn2_229_s768`; sweep builds 256–4096; config D 768/2048. Validator outputs `~/runs/p1/val/<build>/`.

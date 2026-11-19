@@ -7,7 +7,12 @@ TKG: per layer, self_attn runs attn_e_tkg (vendored attention_block_tkg with fus
      --moe-fused-nki-kernel-enabled) stay in the XLA graph.
 Weights: qwen.py's conversion plus the megakernel's rank-grouped fused QKV ([H, I_QKV] per rank) and Wo^T.
 Compiler flags: qwen.py's, plus the backend-verifier opt-out required by the in-place KV scatter.
+
+Env:
+    ATTN_E_HOIST=1  build the attention mask and permuted RoPE tables once per step in the graph and pass them
+                    to attn_e_hoist_tkg (default 0: attn_e_tkg builds them in every call)
 """
+import os
 from typing import Optional, Tuple
 
 import torch
@@ -20,8 +25,28 @@ from neuronx_distributed_inference.models.layer_boundary_marker import (
 )
 
 from megakernels.qwen3_moe import qwen
+from megakernels.qwen3_moe.attn_e_hoist_nki import attn_e_hoist_tkg_jit
 from megakernels.qwen3_moe.attn_e_nki import attn_e_tkg_jit
 from megakernels.qwen3_moe.qwen_with_megakernel import PreTransposedColumnParallelLinear
+from megakernels.qwen3_moe.transformer_qwen3_moe_speculative import D_HEAD, NUM_Q_HEADS_TP
+
+HOIST = os.environ.get("ATTN_E_HOIST", "0") == "1"
+_STEP = {}  # per traced step: position_ids -> (mask, cos_perm, sin_perm), shared by all layers
+
+
+def _step_tensors(position_ids, cos, sin, S_ctx):
+    """Same layouts as _build_full_mask_hbm / _build_permuted_rope_hbm_from_pos."""
+    if _STEP.get("pid") is not position_ids:
+        B, S_tkg = position_ids.shape
+        s = torch.arange(S_ctx, device=position_ids.device).view(S_ctx, 1, 1, 1)
+        t = torch.arange(S_tkg, device=position_ids.device).view(1, 1, 1, S_tkg)
+        base = position_ids[:1, :1].view(1, 1, 1, 1)  # batch 0, as the kernel builder
+        active = (s >= S_ctx - S_tkg) & (s <= S_ctx - S_tkg + t)
+        mask = ((s < base) | active).expand(S_ctx, B, NUM_Q_HEADS_TP, S_tkg).to(torch.bfloat16).contiguous()
+        half = D_HEAD // 2
+        _STEP.update(pid=position_ids, t=(mask, cos[..., :half].permute(2, 0, 1).contiguous(),
+                                          sin[..., :half].permute(2, 0, 1).contiguous()))
+    return _STEP["t"]
 
 
 class Qwen3MoeENeuronConfig(MoENeuronConfig):
@@ -73,6 +98,13 @@ class NeuronQwen3MoEAttentionE(qwen.NeuronQwen3MoEAttention):
                                    **kwargs)
         K, V, gpre = e_tkg
         cos, sin = self.rotary_emb(hidden_states, position_ids)
+        if HOIST:
+            mask, cos_p, sin_p = _step_tensors(position_ids, cos, sin, K.shape[-2])
+            Y, K_out, V_out = attn_e_hoist_tkg_jit[2](
+                hidden_states, self.Wqkv_nki.weight, self.Wo_nki.weight,
+                self.q_layernorm.weight, self.k_layernorm.weight, gpre,
+                K, V, mask, cos_p, sin_p, position_ids.to(torch.int32), replica_groups=self._replica_groups)
+            return self.attn_out_id(Y), (K_out, V_out), cos, sin
         Y, K_out, V_out = attn_e_tkg_jit[2](
             hidden_states, self.Wqkv_nki.weight, self.Wo_nki.weight,
             self.q_layernorm.weight, self.k_layernorm.weight, gpre,

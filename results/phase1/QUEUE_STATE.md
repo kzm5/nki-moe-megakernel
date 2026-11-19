@@ -34,7 +34,7 @@ XLA `traced_xla_trn2_229_s768_greedy` (production), `…_vcap` (validator captur
 
 # Q3 queue state (queue: `docs/queues/Q3.md`, read-only; Nov 19–27)
 
-Updated: 2026-11-19 11:00 ET. Checkpoint `SUMMARY_Q3_mid.md` due Sun Nov 22 12:00 ET; Q3 done Fri Nov 27 12:00 ET.
+Updated: 2026-11-19 12:55 ET. Checkpoint `SUMMARY_Q3_mid.md` due Sun Nov 22 12:00 ET; Q3 done Fri Nov 27 12:00 ET.
 
 ## Environment
 - Results worktree `.claude/worktrees/q3` (branch `worktree-q3`; `git pull --no-rebase mine phase0/trn2-setup`, then `git push mine HEAD:phase0/trn2-setup`). Kernel work: worktrees on `q3/<task>` branches, pushed to `mine`, never merged here.
@@ -47,8 +47,11 @@ Updated: 2026-11-19 11:00 ET. Checkpoint `SUMMARY_Q3_mid.md` due Sun Nov 22 12:0
 | T1 fix skills | done Nov 19 10:39 (`2af2cf5`, doc-only) | `.claude/skills/{nki-kernel-optimizer,neuron-profile}` |
 | T2.1 fp32 router emulation | done Nov 19 10:58: fp32 router already in B/C/XLA; vs bf16 logits KL −21.6%, tie-tolerant flips +1.36 pp | `tools/router_emul.py`, `results/phase1/router_emul.json` |
 | T2.2 fp32 router kernel | **skipped by rule** (flips do not fall ≥ 2 pp; the change would be a no-op) | FINDINGS T2.1 |
-| T3.1 E vs C attribution | in progress: E attributed; C NTFFs were deleted in Phase 0 → re-profiling C (device, ~25 min) | `tools/phase_attrib.py` |
-| T3.2 E-copy changes | pending | |
-| T4 agent study A1/C1(/A2/C2) | pending | |
+| T3.1 E vs C attribution | done Nov 19 11:10: per-call mask/RoPE build (software-DGE stall) ≈ 20 of E's +38.6 µs/layer | `tools/phase_attrib.py`, `results/phase1/t3/` |
+| T3.2 E-copy changes | Eh (hoisted mask/RoPE) passes v1.1, bit-identical to E, profile recovers 32.0 of 38.6 µs/layer; bench B/C/E/Eh n=5 running since 12:42 ET | branch `q3/t3-fusion` (`wt/t3`), build `traced_Eh_trn2_229_s768` |
+| T4 agent study A1/C1(/A2/C2) | harness + prompt ready; starts after the T3 bench | `tools/agent_eval.sh`, `results/phase1/t4/prompt_template.md` |
 | Mid summary | due Nov 22 12:00 | |
 | Wrap-up | due Nov 27 12:00 | |
+
+## Pending deletions (need Kevin's approval)
+- Job-scratch per-instruction JSONs E/C/Eh (~4.2 GB) in `~/.claude/jobs/25305f18/tmp/`; disk 29 GB free on Nov 19 12:45 ET.

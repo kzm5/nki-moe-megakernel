@@ -17,6 +17,7 @@ import argparse, ast, bisect, collections, json, os
 
 ATTN = {
     "attn_e_nki.py": "attn.x_load_y_store",
+    "attn_e_hoist_nki.py": "attn.x_load_y_store",
     "qkv_tkg.py": "attn.qkv",
     "rope.py": "attn.qk_rope",
     "attention_tkg.py": "attn.core",

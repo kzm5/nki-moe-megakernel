@@ -1,0 +1,281 @@
+{
+ "xla.ops": {
+  "wall_us": 9.935928819444452,
+  "union_us": 11.084520833333334,
+  "dma_us": 13.057020833333333,
+  "dma_mb": 4.529157916664656,
+  "stall_us": 757.7999791667106,
+  "n_per_layer": 471.4166666666667,
+  "busy_us": {
+   "Tensor": 23.09,
+   "Vector": 1.7,
+   "GpSimd": 4.5,
+   "Sync": 0.81,
+   "Scalar": 14.46,
+   "TensorMatrix": 44.5
+  }
+ },
+ "xla.cc": {
+  "wall_us": 3.8953822916666625,
+  "union_us": 4.056354166666667,
+  "dma_us": 0.0,
+  "dma_mb": 0.0,
+  "stall_us": 0.0,
+  "n_per_layer": 13.854166666666666,
+  "busy_us": {
+   "CC-core_12": 2.48,
+   "CC-core_13": 1.58,
+   "CC-core_14": 0.51,
+   "CC-core_15": 0.02
+  }
+ },
+ "attn.core": {
+  "wall_us": 9.406797222222243,
+  "union_us": 13.686229166666665,
+  "dma_us": 3.4175625000000003,
+  "dma_mb": 0.30650687499991736,
+  "stall_us": 461.0270833333418,
+  "n_per_layer": 131.79166666666666,
+  "busy_us": {
+   "Tensor": 4.71,
+   "Vector": 8.23,
+   "Scalar": 7.5,
+   "Sync": 1.54,
+   "GpSimd": 5.34,
+   "TensorMatrix": 4.66
+  }
+ },
+ "attn.qkv": {
+  "wall_us": 13.201081250000017,
+  "union_us": 14.196354166666666,
+  "dma_us": 11.2171875,
+  "dma_mb": 5.193782791667269,
+  "stall_us": 812.5811666666765,
+  "n_per_layer": 138.75,
+  "busy_us": {
+   "Vector": 18.17,
+   "Sync": 0.04,
+   "GpSimd": 4.15,
+   "Tensor": 2.99,
+   "TensorMatrix": 28.0,
+   "Scalar": 0.87
+  }
+ },
+ "attn.qk_norm": {
+  "wall_us": 2.09473333333334,
+  "union_us": 4.090354166666667,
+  "dma_us": 3.1051249999999997,
+  "dma_mb": 0.34384229166673375,
+  "stall_us": 228.00385416666973,
+  "n_per_layer": 48.625,
+  "busy_us": {
+   "Vector": 3.3,
+   "GpSimd": 2.34,
+   "Sync": 0.23,
+   "Tensor": 1.91,
+   "TensorMatrix": 2.19,
+   "Scalar": 1.4
+  }
+ },
+ "moe.router": {
+  "wall_us": 12.805388888888913,
+  "union_us": 16.02027083333333,
+  "dma_us": 7.4316875,
+  "dma_mb": 1.5186625833333527,
+  "stall_us": 711.1547291666966,
+  "n_per_layer": 238.4375,
+  "busy_us": {
+   "GpSimd": 3.13,
+   "Sync": 0.09,
+   "Tensor": 9.53,
+   "TensorMatrix": 16.99,
+   "Vector": 17.89,
+   "Scalar": 4.93
+  }
+ },
+ "attn.block_other": {
+  "wall_us": 4.3718597222222195,
+  "union_us": 8.160833333333334,
+  "dma_us": 4.8249375,
+  "dma_mb": 0.5261345833335568,
+  "stall_us": 442.9636666666734,
+  "n_per_layer": 106.10416666666667,
+  "busy_us": {
+   "GpSimd": 2.32,
+   "Vector": 7.38,
+   "Sync": 2.53,
+   "Tensor": 1.97,
+   "TensorMatrix": 3.09,
+   "Scalar": 0.41
+  }
+ },
+ "attn.o_proj": {
+  "wall_us": 7.330163194444445,
+  "union_us": 8.021270833333334,
+  "dma_us": 5.395125,
+  "dma_mb": 1.766509041666328,
+  "stall_us": 338.20931250001445,
+  "n_per_layer": 288.4791666666667,
+  "busy_us": {
+   "GpSimd": 5.72,
+   "Tensor": 21.18,
+   "Vector": 2.4,
+   "TensorMatrix": 25.47,
+   "Sync": 0.01,
+   "Scalar": 0.05
+  }
+ },
+ "attn.cc": {
+  "wall_us": 6.281899652777778,
+  "union_us": 6.443395833333334,
+  "dma_us": 0.0,
+  "dma_mb": 0.0,
+  "stall_us": 0.0,
+  "n_per_layer": 31.645833333333332,
+  "busy_us": {
+   "CC-core_12": 5.51,
+   "CC-core_14": 0.48,
+   "CC-core_13": 1.41,
+   "CC-core_15": 0.01
+  }
+ },
+ "moe.cc": {
+  "wall_us": 0.94421875,
+  "union_us": 0.9829791666666666,
+  "dma_us": 0.0,
+  "dma_mb": 0.0,
+  "stall_us": 0.0,
+  "n_per_layer": 3.6875,
+  "busy_us": {
+   "CC-core_12": 0.63,
+   "CC-core_13": 0.45,
+   "CC-core_14": 0.15,
+   "CC-core_15": 0.0
+  }
+ },
+ "attn.x_load_y_store": {
+  "wall_us": 5.611814236111109,
+  "union_us": 6.043625,
+  "dma_us": 4.20225,
+  "dma_mb": 0.15188362500000435,
+  "stall_us": 761.6282708333267,
+  "n_per_layer": 31.208333333333332,
+  "busy_us": {
+   "Sync": 1.48,
+   "GpSimd": 5.86,
+   "Scalar": 0.67,
+   "Vector": 0.03
+  }
+ },
+ "attn.kv_update": {
+  "wall_us": 1.4917645833333317,
+  "union_us": 3.0063333333333335,
+  "dma_us": 0.257625,
+  "dma_mb": 0.013104333333333372,
+  "stall_us": 336.3877916666676,
+  "n_per_layer": 13.854166666666666,
+  "busy_us": {
+   "Sync": 0.04,
+   "GpSimd": 3.19,
+   "Vector": 0.06
+  }
+ },
+ "attn.qk_rope": {
+  "wall_us": 1.0352420138888878,
+  "union_us": 1.8361458333333334,
+  "dma_us": 1.6604374999999998,
+  "dma_mb": 0.13029216666670587,
+  "stall_us": 2.5201666666666735,
+  "n_per_layer": 21.395833333333332,
+  "busy_us": {
+   "Vector": 3.26,
+   "Sync": 0.0
+  }
+ },
+ "attn.allreduce_gather": {
+  "wall_us": 2.563322916666667,
+  "union_us": 2.8861041666666662,
+  "dma_us": 0.6935208333333334,
+  "dma_mb": 0.0050435833333341016,
+  "stall_us": 247.9333750000008,
+  "n_per_layer": 10.979166666666666,
+  "busy_us": {
+   "Vector": 0.37,
+   "GpSimd": 2.87
+  }
+ },
+ "moe.other": {
+  "wall_us": 10.171737152777911,
+  "union_us": 17.768666666666665,
+  "dma_us": 7.2437499999999995,
+  "dma_mb": 1.0512708750004844,
+  "stall_us": 515.9233750000021,
+  "n_per_layer": 128.125,
+  "busy_us": {
+   "Vector": 15.3,
+   "Scalar": 8.87,
+   "GpSimd": 11.74,
+   "Tensor": 1.8,
+   "TensorMatrix": 5.08,
+   "Sync": 0.0
+  }
+ },
+ "moe.gate_up": {
+  "wall_us": 51.504175347222294,
+  "union_us": 72.528,
+  "dma_us": 58.50360416666666,
+  "dma_mb": 12.871408666289984,
+  "stall_us": 10252.00035415942,
+  "n_per_layer": 1756.875,
+  "busy_us": {
+   "Scalar": 14.82,
+   "Sync": 70.75,
+   "Tensor": 67.15,
+   "TensorMatrix": 92.23,
+   "Vector": 13.25,
+   "GpSimd": 35.9
+  }
+ },
+ "moe.down": {
+  "wall_us": 27.69576145833329,
+  "union_us": 45.38552083333334,
+  "dma_us": 34.718333333333334,
+  "dma_mb": 5.3321091666818665,
+  "stall_us": 5324.767895829962,
+  "n_per_layer": 781.875,
+  "busy_us": {
+   "GpSimd": 53.34,
+   "Tensor": 42.85,
+   "TensorMatrix": 51.53,
+   "Vector": 1.05,
+   "Scalar": 2.89,
+   "Sync": 0.0
+  }
+ },
+ "idle": {
+  "wall_us": 28.99427083333333,
+  "dma_active_us": 14.726895833333332,
+  "by_boundary_us": {
+   "attn.cc -> attn.cc": 9.82,
+   "attn.qkv -> attn.qkv": 3.95,
+   "xla.cc -> xla.cc": 3.35,
+   "moe.down -> moe.down": 1.39,
+   "moe.gate_up -> moe.gate_up": 1.15,
+   "attn.cc -> attn.x_load_y_store": 1.14,
+   "attn.x_load_y_store -> attn.x_load_y_store": 0.83,
+   "attn.core -> attn.qkv": 0.8,
+   "attn.x_load_y_store -> moe.router": 0.65,
+   "attn.x_load_y_store -> moe.gate_up": 0.65,
+   "attn.cc -> attn.allreduce_gather": 0.59,
+   "moe.cc -> moe.cc": 0.56,
+   "moe.cc -> attn.cc": 0.48,
+   "attn.core -> attn.core": 0.31,
+   "moe.gate_up -> moe.down": 0.29
+  }
+ },
+ "_total": {
+  "wall_us": 199.3372916666667,
+  "n_instr": 202421,
+  "n_dma": 2017317
+ }
+}

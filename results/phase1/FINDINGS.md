@@ -2,6 +2,24 @@
 
 Queue: [`docs/queues/Q1Q2.md`](../../docs/queues/Q1Q2.md). State: [`QUEUE_STATE.md`](QUEUE_STATE.md). Ledger: `~/runs/ledger.jsonl` → [`ledger.jsonl`](ledger.jsonl). Times ET unless marked UTC. Q3 (Nov 19–27, [`docs/queues/Q3.md`](../../docs/queues/Q3.md)): newest Q3 entries directly below.
 
+## 2026-11-19 10:40–11:10 — Q3 T2.1: router precision emulated in a bf16 CPU model; T2.2 skipped by rule
+
+`~/runs/run_py.sh p1_t2_router_emul tools/router_emul.py --out ~/runs/p1/t2/router_emul.json` (CPU, 15.6 min, 4.7 GiB) → `results/phase1/router_emul.json`. Whole model in bf16 (weights, activations, residual stream; HF layers, CPU AMX), only the router varied; scored against the frozen golden with the validator's own `kl` / `valid_top8` (tie-tolerant flip rule) over all 7,264 corpus positions × 48 layers, plus the 16 × 512 perplexity set.
+
+| Variant | mean KL | top-1 = golden | ppl (golden 8.342) | router flips, validator rule | strict flips (set differs) |
+|---|---|---|---|---|---|
+| bf16logits (logits rounded to bf16, fp32 softmax/top-k) | 2.43e-3 | 98.49% | 8.342 | 9.53% | 13.87% |
+| **fp32** (bf16 operands, fp32 logits, softmax, top-k) | **1.90e-3** | **98.82%** | 8.329 | 10.89% | 10.89% |
+| fp32in (fp32 + router input = un-rounded fp32 RMSNorm output) | 2.05e-3 | 98.61% | 8.342 | 10.65% | 10.65% |
+
+- **Measured (source + build configs): B, C and XLA already compute router logits and top-k in fp32.** Every build's `neuron_config.json` has `router_config.dtype = float32` (NxDI's Qwen3-MoE sets it "for accuracy"; ours copies it in `megakernels/qwen3_moe/qwen.py:269`). XLA: `RouterTopK` casts the bf16 hidden state to fp32 for an fp32 matmul (`--auto-cast=none`), float64 softmax, top-k on fp32 logits. B: `moe_block_tkg` copies the RMSNorm output to `router_mm_dtype`; `router_topk` accumulates in fp32 PSUM, keeps `router_logits_sb` fp32 and runs `max8` / `nc_find_index8` on it (only the HBM copy of the logits is bf16). C: the legacy `router_topk` does the same with bf16 weights (fp32 PSUM/SBUF logits). So the "fp32" row is the status quo of all three builds, not a new lever.
+- **Measured:** against bf16 logits, fp32 logits cut mean KL by 21.6% and strict flips by 2.98 pp; on the validator's tie-tolerant rule flips *rise* 1.36 pp, because bf16 logits create exact ties at the 8th/9th expert that the rule forgives (the tie rule is lenient to low-precision logits).
+- **Measured:** the remaining router-local lever (fp32in) does not help: −0.24 pp flips, +7.5% KL, ppl +0.013 vs fp32 (all within the variant-to-variant noise of this emulation).
+- **Decision rule applied:** the validator-rule flip rate falls by less than 2 pp (it rises) → **skip T2.2; this emulation is the T2 result.** Independently, the T2.2 kernel change (fp32 router logits + top-k in B) would be a no-op. If Kevin wants strict flips used instead (2.98 pp ≥ 2 and KL −21.6% ≥ 10%), the rule would pass, but the fp32 router it would build already exists.
+- Emulation fidelity (Measured): the fp32 row's KL (1.90e-3) is close to B's device KL (0.87 × XLA's 2.26e-3 = 1.97e-3); its flip rate (10.89%) is 1.4 pp above XLA's device 9.52% and ~2.8 pp above B's, so compare emulated variants with each other, not with device rows.
+- Per-layer flips (fp32) peak at L24–33 (15.9 / 15.3%), L0 1.7%. Residual rel-L2 at the 512 sampled positions L0/L47: 0.0096/0.052 (bf16logits), 0.0060/0.046 (fp32), 0.0058/0.045 (fp32in).
+- **Plan discrepancy (for Kevin):** RESEARCH_PLAN's Phase 3 / Q3 T2 treat fp32 router logits as an untested accuracy lever; on this stack they are already in every build, so router flips (~87% of MoE error, Phase 0 Task R) come from upstream bf16 hidden-state error, not router precision. **Hypothesis:** the accuracy levers left are upstream: fp32 residual stream or bf16-input rounding of the expert GEMMs (H2.2: 30% of XLA's KL).
+
 ## 2026-11-19 10:37–10:39 — Q3 T1: skill fixes (doc-only, commit `2af2cf5`)
 
 - Re-verified on SDK 2.29 before editing (Measured): `nisa.dge_mode` members `hwdge, none, swdge, unknown`; `nki.jit(k, platform_target='trn2')` raises `ValueError … deprecated. Use NEURON_PLATFORM_TARGET_OVERRIDE`.

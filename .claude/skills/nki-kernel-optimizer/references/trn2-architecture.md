@@ -104,7 +104,7 @@ New hardware block in NeuronCore-v3. Two DGE instances per NeuronCore. Generates
 
 - Frees GpSimdE for computation and eliminates HBM descriptor storage overhead.
 - Triggered from ScalarE or SyncE (compiler decides).
-- Enable via `dge_mode=nisa.dge_mode.hw_dge` in `nisa.dma_copy` / `nisa.dma_transpose`.
+- Enable via `dge_mode=nisa.dge_mode.hwdge` in `nisa.dma_copy` / `nisa.dma_transpose`.
 - Execution time: ~600 ns per DGE-based DMA instruction; can overlap with ScalarE compute pipeline.
 - **Limitation**: does not support indirect DMA (gather/scatter) — use software DGE (GpSimdE) for those.
 
@@ -116,6 +116,6 @@ New hardware block in NeuronCore-v3. Two DGE instances per NeuronCore. Generates
 2. **Prefer FP8 for matmul-bound kernels** — double throughput vs BF16, no extra API changes beyond `perf_mode`.
 3. **VectorE performance mode is automatic** — ensure BF16/FP16 SBUF tensors have contiguous inner-most free dims to hit 4× mode.
 4. **DMA transpose instead of TensorE transpose** when VectorE/ScalarE is the bottleneck.
-5. **Use hardware DGE** (`dge_mode=nisa.dge_mode.hw_dge`) for all DMA operations that don't need gather/scatter.
+5. **Use hardware DGE** (`dge_mode=nisa.dge_mode.hwdge`; members: `hwdge, swdge, none, unknown`) for all DMA operations that don't need gather/scatter.
 6. **Bucket sizes must be 128-aligned** for MoE kernels on trn2.
 7. **DGE `scalar_offset` pattern**: always use `offset=0` (see nki-syntax-quickref.md for details).

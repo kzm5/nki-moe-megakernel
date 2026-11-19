@@ -198,7 +198,7 @@ def moe_kernel(hidden_hbm, weights_hbm, affinities_hbm, output_hbm,
 #!/bin/bash
 # setup_env.sh — run before any NKI work
 
-source /opt/aws_neuronx_venv_pytorch_2_9_nxd_inference/bin/activate
+source ~/venv-neuron-229/activate-neuron.sh   # SDK 2.29, nkilib fork 2.29_release
 export NEURON_PLATFORM_TARGET_OVERRIDE=trn2
 
 echo "Neuron environment ready."

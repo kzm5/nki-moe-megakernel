@@ -18,7 +18,7 @@ Two usage styles:
 
   Style A — wrap after @nki.jit:
 
-      @nki.jit(platform_target="trn2")
+      @nki.jit  # NEURON_PLATFORM_TARGET_OVERRIDE=trn2
       def my_kernel(a, b): ...
 
       my_kernel = wrap_benchmark(my_kernel, warmup=5, iters=50)
@@ -259,7 +259,7 @@ def wrap_benchmark(
 
     IMPORTANT: Apply AFTER @nki.jit to avoid confusing the kernel rewriter:
 
-        @nki.jit(platform_target="trn2")
+        @nki.jit  # NEURON_PLATFORM_TARGET_OVERRIDE=trn2
         def my_kernel(a, b): ...
 
         my_kernel = wrap_benchmark(my_kernel, warmup=5, iters=50)
@@ -332,7 +332,7 @@ def nki_benchmark(
     neuron-bench latency is printed at script exit.
 
     Usage:
-        @nki.jit(platform_target="trn2")
+        @nki.jit  # NEURON_PLATFORM_TARGET_OVERRIDE=trn2
         def my_kernel(a, b): ...
 
         result = nki_benchmark(my_kernel, a, b, warmup=5, iters=50)

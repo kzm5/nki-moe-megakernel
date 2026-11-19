@@ -13,11 +13,11 @@ description: |
 ## Environment Setup (ALWAYS do this before running any kernel)
 
 ```bash
-source /opt/aws_neuronx_venv_pytorch_2_9_nxd_inference/bin/activate
+source ~/venv-neuron-229/activate-neuron.sh   # SDK 2.29, nkilib fork 2.29_release
 export NEURON_PLATFORM_TARGET_OVERRIDE=trn2
 ```
 
-**Hardware**: AWS Trainium 2/3
+**Hardware**: AWS Trainium2 (NeuronCore-v3). trn3-only features (MX matmul/quantize) fail on trn2; use nki-kernel-optimizer-trn3 for trn3
 NeuronCores are exclusive: only one Python process can hold them at a time. Run kernels sequentially.
 
 ---
@@ -193,6 +193,8 @@ Also include the complete, runnable kernel code with inline comments.
 ## Step 5 — Correctness Harness and Benchmarking
 
 ### Correctness
+
+> `nki.simulate` computes in fp32 and does not round bf16 intermediates, so a simulated match does not prove bf16 equivalence. Confirm on device before claiming bit-identity.
 
 Always compare against the **PyTorch reference function provided at intake** — never against the original NKI kernel. Use the same seed for all subagents across all rounds.
 

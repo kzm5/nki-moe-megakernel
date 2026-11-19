@@ -111,7 +111,7 @@ neuron-profile show-session -s <f.ntff> --show-trace 2>&1 \
 
 # CC-core collective events (AllReduce triggers)
 neuron-profile show-session -s <f.ntff> --show-trace 2>&1 \
-  | grep -A99999 "Collectives trace for CC-core 8" \
+  | grep -A99999 "Collectives trace for CC-core <id>"   # ids vary by rank; list them first \
   | grep "TPB_TRIGGER" | grep "START" | awk '{print $2}'
 
 # DMA transfer sizes and timing
@@ -149,7 +149,7 @@ neuron-profile view -n <neff> -s <f.ntff> --output-format summary-json 2>/dev/nu
 # ns_per_cycle = total_time_s * 1e9 / CycleCount
 ```
 
-In practice on trn2/trn3 with ~1 GHz profile clock, **1 cycle ≈ 1 ns** is a good approximation. Verify against total_time.
+Measured on trn2 (tools 2.30): the profile clock is **~1.2 GHz** (13.3 M cycles in 11.1 ms), so do not assume 1 cycle = 1 ns; always derive ns_per_cycle from total_time. For multi-rank or LNC=2 runs see `references/reading_the_profiler.md` (Multiple ranks and LNC=2).
 
 ### 5. Present results
 

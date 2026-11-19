@@ -28,13 +28,15 @@ d.keys()  # ['instruction_usage', 'stack_frame_function_name', 'metadata', 'cc_s
 
 ## Per-instruction fields
 
+> **Units (tools 2.30):** `summary-json` / `--output-format json` `timestamp`, `duration` and `evt_wait_time` are **ns** (max timestamp ≈ `total_time × 1e9`); `--show-trace` timestamps and show-session's CYCLES column are ps. Check the max timestamp against `total_time` before converting.
+
 Every entry in `d['instruction']` has these fields (relevant ones for kernel attribution):
 
 | Field | Meaning |
 |---|---|
-| `timestamp` | Start time in **picoseconds** (÷1e6 → µs, ÷1e9 → ms). Verify: max timestamp ≈ `total_time * 1e12`. |
-| `duration` | Instruction length in ps. Engine-local — parallel engines overlap. |
-| `evt_wait_time` | **Stall time** — ps spent waiting on a semaphore before the instruction could issue. This is the key stall metric. |
+| `timestamp` | Start time in **ns** (÷1e3 → µs, ÷1e6 → ms). Verify: max timestamp ≈ `total_time * 1e9`. |
+| `duration` | Instruction length in ns. Engine-local — parallel engines overlap. |
+| `evt_wait_time` | **Stall time** — ns spent waiting on a semaphore before the instruction could issue. This is the key stall metric. |
 | `label` / `subgroup` | Engine: `Tensor`, `Vector`, `Scalar`, `GpSimd`, `Sync`, `DMA` variants |
 | `opcode` | e.g. `DMA_DIRECT2D`, `ACTIVATION`, `MATMUL`, `TENSOR_TENSOR`, `NOTIFY` |
 | `hbm_read_bytes`, `hbm_write_bytes`, `sbuf_read_bytes`, `sbuf_write_bytes` | Bytes moved by this one instruction |

@@ -19,8 +19,8 @@ import nki.isa as nisa
 def my_kernel(input_hbm: nl.ndarray, output_hbm: nl.ndarray):
     ...
 
-# With platform target
-my_kernel_jit = nki.jit(my_kernel, platform_target="trn2")
+# Platform target comes from the environment
+my_kernel_jit = nki.jit(my_kernel)  # target: NEURON_PLATFORM_TARGET_OVERRIDE=trn2 (NKI 0.3 rejects platform_target=)
 result = my_kernel_jit(input_tensor)
 
 # Trace mode (for dispatch wrappers — returns 0, not the output tensor)
@@ -145,7 +145,7 @@ s = nl.softmax(a, axis=[1])
 nisa.nc_matmul(dst=psum_out, stationary=weight_sbuf, moving=input_sbuf)
 
 # MXFP8/MXFP4 quantized matmul with integrated dequantization
-nisa.nc_matmul_mx(dst=psum_out, stationary=weight_sbuf, moving=input_sbuf, ...)
+nisa.nc_matmul_mx(dst=psum_out, stationary=weight_sbuf, moving=input_sbuf, ...)  # trn3 only: fails on trn2 (NCC_IBIR530)
 
 # Elementwise tensor-tensor
 nisa.tensor_tensor(dst=out, data1=a, data2=b, op=nl.add)
@@ -196,7 +196,7 @@ nisa.exponential(dst=out, data=a, max_value=max_val)
 nisa.reciprocal(dst=out, data=a)
 
 # Quantize FP16/BF16 to MXFP8
-nisa.quantize_mx(dst_data=out_data, dst_scale=out_scale, src=a)
+nisa.quantize_mx(dst_data=out_data, dst_scale=out_scale, src=a)  # trn3 only: fails on trn2 (NCC_IBIR530)
 
 # Fill with compile-time constant
 nisa.iota(dst=out, value=0.0)  # also generates literal patterns
@@ -417,7 +417,7 @@ status = nki.jit(wrapper, mode="trace")(hidden_states=..., spec=spec)
 
 ### Pattern C: Standard `nki.jit` with Python-dispatch wrapper (e.g., `moe_tkg`)
 ```python
-kernel_jit = nki.jit(my_fn, platform_target="trn2")
+kernel_jit = nki.jit(my_fn)  # NEURON_PLATFORM_TARGET_OVERRIDE=trn2
 output = kernel_jit(input=..., flag=True, ...)   # returns output tensor
 # Boolean args evaluated at trace time
 ```

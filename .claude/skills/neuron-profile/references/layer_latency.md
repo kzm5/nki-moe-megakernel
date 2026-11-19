@@ -8,16 +8,18 @@ This works even without a NEFF because the pattern is structural: every transfor
 
 ## Extraction Command
 
+List the CC-core ids first (`grep 'Collectives trace for CC-core'`; e.g. 12–15 on a trn2 TP=4 rank, not 8). `--show-trace` timestamps are ps with tools 2.30: check the last timestamp against `total_time` and scale the gap below accordingly.
+
 ```bash
 neuron-profile show-session -s <file.ntff> --show-trace 2>&1 \
-  | grep -A9999999 "Collectives trace for CC-core 8" \
+  | grep -A9999999 "Collectives trace for CC-core <id>" \
   | grep "TPB_TRIGGER" \
   | grep "START" \
   | awk '{print $2}' \
   | awk 'NR>1 { gap = $1 - prev; printf "gap %d: %d ns (%.1f us)\n", NR-1, gap, gap/1000 } { prev = $1 }'
 ```
 
-**Why CC-core 8?** The CC-core index depends on the TP group. For TP=4 on trn2, core 8 is reliably in the first TP rank. Adjust if your topology differs — check `show-session` output for the highest CC-core index that shows `TPB_TRIGGER` events.
+**Which CC-core?** The index depends on the rank and topology (measured on trn2 TP=4, LNC=2: 12–15 on one rank, not 8). Use the CC-core in the NTFF's `show-session` output that shows `TPB_TRIGGER` events. Each rank has its own NTFF; ranks start staggered, so use the least-skewed one (minimum `total_time`).
 
 **Why `$2`?** In the `--show-trace` output, CC-core events are printed as:
 ```
@@ -44,7 +46,7 @@ To sum per-layer total time:
 
 ```bash
 neuron-profile show-session -s <file.ntff> --show-trace 2>&1 \
-  | grep -A9999999 "Collectives trace for CC-core 8" \
+  | grep -A9999999 "Collectives trace for CC-core <id>" \
   | grep "TPB_TRIGGER" \
   | grep "START" \
   | awk '{print $2}' \

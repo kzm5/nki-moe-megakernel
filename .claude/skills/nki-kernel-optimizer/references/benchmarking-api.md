@@ -35,7 +35,7 @@ Apply after `@nki.jit`. The wrapper is transparent: same call signature, same re
 import nki
 from benchmark import wrap_benchmark  # benchmark.py must be in the same directory
 
-@nki.jit(platform_target="trn2")
+@nki.jit  # NEURON_PLATFORM_TARGET_OVERRIDE=trn2
 def my_kernel(a, b):
     ...
 
@@ -132,7 +132,7 @@ import nki
 import nki.language as nl
 
 
-@nki.jit(platform_target="trn2")
+@nki.jit  # NEURON_PLATFORM_TARGET_OVERRIDE=trn2
 def my_kernel(a, b):
     ...
 

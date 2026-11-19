@@ -151,15 +151,21 @@ Open `.pb` files at https://ui.perfetto.dev.
 | **NC** (NeuronCore) | The compute core. `ND 0 NC 4` = NeuronDevice 0, NeuronCore 4. |
 | **LNC** | "Logical NeuronCore" — software-level view when LNC=2 (two physical cores treated as one logical unit for sharding). |
 | **DGE** | Descriptor Generation Engine — hardware (HWDGE) or software (SWDGE) unit that builds DMA descriptors. |
-| **CC-core** | Collective Communication core. Handles cross-device collective ops. |
+| **CC-core** | Collective Communication core. Handles cross-device collective ops. Ids vary by rank. |
 | **Stationary / moving** | `nc_matmul(stationary=A, moving=B)` — stationary stays in the PE array (uses `LDWEIGHTS` once), moving streams through. |
-| **`evt_wait_time`** | Picoseconds spent waiting on a semaphore before this instruction could issue. Stall metric. |
-| **`duration`** | Picoseconds the instruction itself took to run. Engine-local. |
-| **`timestamp`** | Absolute start time in picoseconds. Max timestamp ≈ total_time × 1e12. |
+| **`evt_wait_time`** | Nanoseconds spent waiting on a semaphore before this instruction could issue. Stall metric. |
+| **`duration`** | Nanoseconds the instruction itself took to run. Engine-local. |
+| **`timestamp`** | Absolute start time in ns (JSON output). Max timestamp ≈ total_time × 1e9. |
 | **`layer`** | PyTorch module path hierarchy producing this instruction. |
-| **CycleCount / profile clock** | ~1 GHz on trn2/trn3 — so 1 cycle ≈ 1 ns. Verify against `total_time`. |
+| **CycleCount / profile clock** | ~1.2 GHz measured on trn2 — derive ns per cycle from `total_time`. |
 
 ---
+
+## Multiple ranks and LNC=2
+
+- A TP run writes one NTFF per rank. Ranks start staggered, so early ranks wait in collectives and their `cc_op_time` / total time is inflated. Compare per-rank totals and report the least-skewed rank (minimum `total_time`), saying which one.
+- At LNC=2 one NTFF covers two physical cores: summary engine times are their union, instruction counts their sum.
+- CC-core ids vary by rank (e.g. 12–15 on a trn2 TP=4 rank); list them with `grep 'Collectives trace for CC-core'` instead of assuming 8.
 
 ## Mental model for common patterns
 

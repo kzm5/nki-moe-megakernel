@@ -44,7 +44,7 @@ Updated: 2026-11-19 10:45 ET. Checkpoint `SUMMARY_Q3_mid.md` due Sun Nov 22 12:0
 | Task | Status | Paths |
 |---|---|---|
 | Start of session | done Nov 19 10:45 | FINDINGS "Q3 state on start"; CLAUDE.md reading list → Q3 |
-| T1 fix skills | pending | |
+| T1 fix skills | done Nov 19 11:05 (`2af2cf5`, doc-only) | `.claude/skills/{nki-kernel-optimizer,neuron-profile}` |
 | T2.1 fp32 router emulation | pending | |
 | T2.2 fp32 router kernel | pending (decision rule after T2.1) | |
 | T3.1 E vs C attribution | pending | |

@@ -146,6 +146,20 @@ Added by Kevin (Nov 18). N = B + one null NKI kernel per layer on TKG (`megakern
 - **Hypothesis (what fusion saves on trn2, to test next):** state the standalone kernel must rebuild on every call — weights and layer-invariant constants loaded into SBUF per call, the mask and permuted RoPE scratch rebuilt per call (C hoists them out of its layer loop), and its own all-reduce-gather — rather than the boundary itself. A standalone E with the mask/RoPE build hoisted to one call per step would isolate the hoisting share; that needs a kernel-file change (Q3, needs approval).
 - Same-session drift: B 10.52 here vs 10.49 in T8 the previous evening; C 10.36 vs 10.29.
 
+## 2026-11-18 23:40 → 00:10 ET — H2.2 (early-finish item): expert-GEMM precision emulated in the CPU golden (Measured)
+
+`~/runs/run_py.sh p1_h22 tools/h22_accum.py --variants fp32 bf16in bf16acc --out ~/runs/p1/h22/h22.json` (CPU, 27 min). The layer-by-layer fp32 golden is re-run with only the expert MLPs' gate/up/down projections replaced (`Qwen3MoeMLP.forward` patched at runtime): **bf16in** = inputs and weights rounded to bf16, fp32 accumulation, outputs rounded to bf16 (like PSUM-fp32 hardware); **bf16acc** = the same with the contraction accumulated in bf16 across 128-wide partial products. Compared with the frozen golden: KL at all 7,264 corpus positions, residual rel-L2 at the 512 sampled positions (`golden/layers.pt`). → `results/phase1/h22.json`.
+
+| Variant | mean KL(golden ‖ variant) | ÷ XLA's mean KL (2.26e-3) | max KL | top-1 = golden | residual rel-L2 L0 / L24 / L47 |
+|---|---|---|---|---|---|
+| fp32 (harness self-check) | 3.0e-6 | 0.001 | 0.005 | 100% | 0.0000 / 0.0011 / 0.0046 |
+| bf16in | 6.85e-4 | **0.30** | 0.169 | 99.37% | 0.0009 / 0.0244 / 0.0343 |
+| bf16acc (128-wide) | 9.86e-4 | **0.44** | 0.166 | 99.24% | 0.0019 / 0.0284 / 0.0355 |
+
+- **Measured:** the self-check reproduces the golden (KL 3e-6; residual noise floor 0.005 at L47 from fp32 CPU reduction order, 10× below XLA's 0.051).
+- **Measured:** bf16 rounding of the expert GEMMs alone (fp32 accumulation) produces ~30% of XLA's total logit divergence; bf16 accumulation over 128-wide chunks raises it to ~44% (+44% relative). Input/weight rounding matters more than accumulation precision on this model — consistent with m1 (bf16 accumulation over 8-wide chunks on device, KL ratio 1.04) being barely detectable.
+- Caveat: residuals are on the 512 sampled positions (one high-error position makes L33 read 0.098 for both variants vs XLA's all-position 0.067), so compare variants with each other, not with the all-position XLA table.
+
 ## 2026-11-18 18:50 ET — H2.6 (early-finish item): error vs depth for XLA, B, E (Measured)
 
 `python tools/error_budget.py --builds xla=$HOME/runs/p1/val/xla_base B=$HOME/runs/p1/val/libmoe E=$HOME/runs/p1/val/E_cap --corpus … --out results/phase1/error_budget/xla_B_E` (7,200 decode positions each; residual = decoder-layer output, rel-L2 vs fp32 golden).

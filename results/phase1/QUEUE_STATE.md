@@ -26,7 +26,7 @@ Updated: 2026-11-18 23:30 ET. **Q1 and Q2 done** (deadlines Thu Nov 19 12:00 / S
 | T10 trn3 script | written, not run | `scripts/trn3_bringup.{sh,md}`, `tools/bench_only.py` |
 | T11 skill audit | done | `results/phase1/SKILL_AUDIT.md`, `tests/skill_audit/` |
 | H2.6 | done | `results/phase1/error_budget/xla_B_E.{json,csv}` |
-| H2.2 | not started | – |
+| H2.2 | done Nov 19 00:10 ET | `tools/h22_accum.py`, `results/phase1/h22.json` |
 | Wrap-up | SUMMARY_Q1Q2 written | – |
 
 ## Builds (`~/qwen-30b-a3b/`)

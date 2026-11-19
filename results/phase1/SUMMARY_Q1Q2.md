@@ -64,7 +64,10 @@ NKI builds start with ~30% less residual error than XLA at L0 (lib MoE's layer-0
 - My first reading of T8 ("fusion share ≈ 1.9 ms, sweep back in scope") was wrong; corrected by Kevin.
 - `git pull --rebase` cannot rewrite the read-only validator files → rule changed to `--no-rebase` (approved).
 - `*.json` is gitignored repo-wide; the Phase 1 JSONs were not pushed until Nov 18 (`git add -f` now).
-- Not done: H2.2 (accumulation precision in the CPU golden).
+- H2.2 done after the wrap-up (below).
+
+## Early-finish item H2.2 (expert-GEMM precision in the CPU golden)
+With everything else fp32, bf16 inputs/weights in the expert GEMMs (fp32 accumulation) give mean KL 6.85e-4 = 30% of XLA's total; bf16 accumulation over 128-wide chunks gives 9.86e-4 = 44%. Input rounding dominates accumulation precision; harness self-check KL 3e-6.
 
 ## Recommended next steps
 1. Q3 (with kernel-edit approval): split E's ~31 µs/layer of standalone attention cost — hoist mask/RoPE builds to once per step, pre-load weights — to name the mechanism fusion removes on trn2.

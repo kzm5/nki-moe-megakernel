@@ -148,22 +148,42 @@ def main():
         ph[t]["dma_mb"] += x.get("transfer_size", 0) / 1e6 / L
         ph[t]["div"].append((x["timestamp"], x["timestamp"] + x.get("duration", 0)))
     events.sort()
+    dma_iv = sorted((x["timestamp"], x["timestamp"] + x.get("duration", 0)) for x in d["dma"])
+    dma_starts = [s for s, _ in dma_iv]
+    dma_end_max, m = [], 0
+    for _, e in dma_iv:
+        m = max(m, e)
+        dma_end_max.append(m)
+
+    def dma_overlap(s, e):
+        """Time in [s, e) covered by DMA transfers (merged)."""
+        k = bisect.bisect_right(dma_starts, e)
+        iv = [(max(a, s), min(b, e)) for a, b in dma_iv[max(0, bisect.bisect_left(dma_end_max, s)):k] if b > s]
+        return merged([x for x in iv if x[1] > x[0]])
+
     active, last, wall = collections.Counter(), None, collections.Counter()
+    prev_t, gaps = None, collections.Counter()
     for tm, kind, t in events:
         if last is not None and tm > last:
             live = [k for k, v in active.items() if v > 0]
             for k in live:
                 wall[k] += (tm - last) / len(live)
             if not live:
+                ov = dma_overlap(last, tm)
                 wall["idle"] += tm - last
+                wall["idle_dma"] += ov
+                gaps[(prev_t, t)] += tm - last
         active[t] += kind
+        if kind == -1:
+            prev_t = t
         last = tm
     res = {}
     for t, p in ph.items():
         res[t] = {"wall_us": wall[t] / 1e3 / L, "union_us": merged(p["iv"]) / 1e3 / L,
                   "dma_us": merged(p["div"]) / 1e3 / L, "dma_mb": p["dma_mb"], "stall_us": p["stall_us"],
                   "n_per_layer": p["n"] / L, "busy_us": {k: round(v, 2) for k, v in p["busy_us"].items()}}
-    res["idle"] = {"wall_us": wall["idle"] / 1e3 / L}
+    res["idle"] = {"wall_us": wall["idle"] / 1e3 / L, "dma_active_us": wall["idle_dma"] / 1e3 / L,
+                   "by_boundary_us": {f"{a} -> {b}": round(v / 1e3 / L, 2) for (a, b), v in gaps.most_common(15)}}
     end = max(e for p in ph.values() for _, e in p["iv"])
     res["_total"] = {"wall_us": end / 1e3 / L, "n_instr": len(ins), "n_dma": len(d["dma"])}
     json.dump(res, open(a.out, "w"), indent=1)
@@ -173,7 +193,9 @@ def main():
     for t in sorted(res, key=lambda k: -res[k]["wall_us"]):
         r = res[t]
         if "busy_us" not in r:
-            print(f"{t:26s} {r['wall_us']:7.1f}")
+            print(f"{t:26s} {r['wall_us']:7.1f}" + (f"  (DMA active {r['dma_active_us']:.1f})" if t == "idle" else ""))
+            for k, v in r.get("by_boundary_us", {}).items():
+                print(f"    idle {v:6.2f}  {k}")
             continue
         print(f"{t:26s} {r['wall_us']:7.1f} {r['union_us']:7.1f} {r['dma_us']:7.1f} {r['dma_mb']:7.3f} "
               f"{r['n_per_layer']:6.0f} " + " ".join(f"{r['busy_us'].get(e, 0):6.1f}" for e in eng))

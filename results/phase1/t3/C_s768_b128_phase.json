@@ -1,0 +1,325 @@
+{
+ "xla.ops": {
+  "wall_us": 7.151420486111132,
+  "union_us": 10.849041666666666,
+  "dma_us": 15.646541666666666,
+  "dma_mb": 4.951561958322723,
+  "stall_us": 759.5817083333546,
+  "n_per_layer": 290.5208333333333,
+  "busy_us": {
+   "Tensor": 12.62,
+   "Vector": 1.43,
+   "GpSimd": 12.06,
+   "Scalar": 6.78,
+   "Sync": 0.95,
+   "TensorMatrix": 20.61
+  }
+ },
+ "xla.cc": {
+  "wall_us": 8.084660069444455,
+  "union_us": 8.32325,
+  "dma_us": 0.0,
+  "dma_mb": 0.0,
+  "stall_us": 0.0,
+  "n_per_layer": 27.604166666666668,
+  "busy_us": {
+   "CC-core_12": 5.16,
+   "CC-core_13": 3.14,
+   "CC-core_14": 1.05,
+   "CC-core_15": 0.03
+  }
+ },
+ "attn.qk_norm": {
+  "wall_us": 3.1811204861110975,
+  "union_us": 5.719291666666667,
+  "dma_us": 4.1290000000000004,
+  "dma_mb": 0.5619556666667432,
+  "stall_us": 232.37495833333654,
+  "n_per_layer": 50.25,
+  "busy_us": {
+   "Vector": 3.1,
+   "GpSimd": 2.7,
+   "Scalar": 1.62,
+   "Tensor": 2.09,
+   "TensorMatrix": 2.62,
+   "Sync": 0.11
+  }
+ },
+ "attn.qkv": {
+  "wall_us": 13.410560416666684,
+  "union_us": 15.724145833333333,
+  "dma_us": 12.718416666666668,
+  "dma_mb": 4.973850875000389,
+  "stall_us": 804.0908333333448,
+  "n_per_layer": 136.85416666666666,
+  "busy_us": {
+   "Vector": 17.72,
+   "GpSimd": 5.49,
+   "TensorMatrix": 28.07,
+   "Tensor": 3.04,
+   "Scalar": 0.7,
+   "Sync": 0.24
+  }
+ },
+ "attn.mask_build": {
+  "wall_us": 0.9580295138888889,
+  "union_us": 1.3809166666666668,
+  "dma_us": 0.20085416666666667,
+  "dma_mb": 0.023437208333333463,
+  "stall_us": 6.31645833333333,
+  "n_per_layer": 2.0416666666666665,
+  "busy_us": {
+   "GpSimd": 1.29,
+   "Vector": 0.08,
+   "Sync": 0.01,
+   "Scalar": 0.16,
+   "TensorMatrix": 0.11,
+   "Tensor": 0.04
+  }
+ },
+ "moe.router": {
+  "wall_us": 10.150235763888874,
+  "union_us": 13.227166666666667,
+  "dma_us": 4.597520833333333,
+  "dma_mb": 0.7042754166667725,
+  "stall_us": 419.1320625000138,
+  "n_per_layer": 159.875,
+  "busy_us": {
+   "GpSimd": 1.72,
+   "Scalar": 5.25,
+   "Tensor": 5.25,
+   "TensorMatrix": 11.44,
+   "Vector": 14.52,
+   "Sync": 1.31
+  }
+ },
+ "attn.core": {
+  "wall_us": 10.934914583333347,
+  "union_us": 16.767833333333332,
+  "dma_us": 4.871104166666666,
+  "dma_mb": 0.6107962083334324,
+  "stall_us": 323.9610833333423,
+  "n_per_layer": 118.02083333333333,
+  "busy_us": {
+   "Sync": 5.81,
+   "Tensor": 4.4,
+   "TensorMatrix": 4.55,
+   "Scalar": 7.19,
+   "Vector": 7.29,
+   "GpSimd": 4.21
+  }
+ },
+ "attn.cc": {
+  "wall_us": 4.044281597222223,
+  "union_us": 4.211125,
+  "dma_us": 0.0,
+  "dma_mb": 0.0,
+  "stall_us": 0.0,
+  "n_per_layer": 23.875,
+  "busy_us": {
+   "CC-core_14": 0.09,
+   "CC-core_13": 0.31,
+   "CC-core_15": 0.0,
+   "CC-core_12": 3.91
+  }
+ },
+ "attn.block_other": {
+  "wall_us": 3.909630208333333,
+  "union_us": 7.625875,
+  "dma_us": 4.810895833333333,
+  "dma_mb": 0.5619890000001341,
+  "stall_us": 288.91193750000747,
+  "n_per_layer": 94.125,
+  "busy_us": {
+   "Vector": 6.82,
+   "Tensor": 1.98,
+   "TensorMatrix": 3.21,
+   "GpSimd": 2.04,
+   "Scalar": 0.12,
+   "Sync": 2.56
+  }
+ },
+ "attn.o_proj": {
+  "wall_us": 6.0160593750000055,
+  "union_us": 7.246270833333334,
+  "dma_us": 2.579,
+  "dma_mb": 0.7276519166666865,
+  "stall_us": 208.70129166667797,
+  "n_per_layer": 282.3125,
+  "busy_us": {
+   "Scalar": 0.12,
+   "Tensor": 20.97,
+   "TensorMatrix": 25.38,
+   "GpSimd": 3.37,
+   "Sync": 0.05,
+   "Vector": 2.52
+  }
+ },
+ "attn.kv_update": {
+  "wall_us": 1.6428659722222225,
+  "union_us": 3.174729166666667,
+  "dma_us": 1.4706875000000001,
+  "dma_mb": 0.2065435416666661,
+  "stall_us": 348.8316250000001,
+  "n_per_layer": 17.145833333333332,
+  "busy_us": {
+   "Tensor": 0.14,
+   "TensorMatrix": 0.32,
+   "Sync": 0.02,
+   "GpSimd": 3.43,
+   "Scalar": 0.4,
+   "Vector": 0.05
+  }
+ },
+ "mk.body": {
+  "wall_us": 3.8964506944444417,
+  "union_us": 5.267875,
+  "dma_us": 3.0598125,
+  "dma_mb": 0.7313347916666508,
+  "stall_us": 302.50441666666705,
+  "n_per_layer": 57.458333333333336,
+  "busy_us": {
+   "TensorMatrix": 1.71,
+   "Tensor": 0.75,
+   "Scalar": 2.79,
+   "GpSimd": 3.35,
+   "Vector": 4.34,
+   "Sync": 0.03
+  }
+ },
+ "mk.cc": {
+  "wall_us": 0.031697916666666666,
+  "union_us": 0.06339583333333333,
+  "dma_us": 0.0,
+  "dma_mb": 0.0,
+  "stall_us": 0.0,
+  "n_per_layer": 0.3333333333333333,
+  "busy_us": {
+   "CC-core_12": 0.06
+  }
+ },
+ "attn.rope_build": {
+  "wall_us": 0.023251388888888887,
+  "union_us": 0.06829166666666667,
+  "dma_us": 0.357375,
+  "dma_mb": 0.035659791666666496,
+  "stall_us": 4.3802916666666665,
+  "n_per_layer": 0.20833333333333334,
+  "busy_us": {
+   "Sync": 0.09,
+   "GpSimd": 0.0,
+   "Vector": 0.0
+  }
+ },
+ "moe.gate_up": {
+  "wall_us": 53.48089236111098,
+  "union_us": 74.963375,
+  "dma_us": 60.86804166666667,
+  "dma_mb": 13.380374207972567,
+  "stall_us": 10231.754666659548,
+  "n_per_layer": 1748.7291666666667,
+  "busy_us": {
+   "Sync": 71.84,
+   "Scalar": 14.65,
+   "Vector": 13.26,
+   "Tensor": 66.72,
+   "TensorMatrix": 91.6,
+   "GpSimd": 41.24
+  }
+ },
+ "moe.other": {
+  "wall_us": 5.692574305555517,
+  "union_us": 11.6801875,
+  "dma_us": 6.250979166666667,
+  "dma_mb": 0.7651079166669843,
+  "stall_us": 187.39668750000072,
+  "n_per_layer": 73.91666666666667,
+  "busy_us": {
+   "Vector": 10.55,
+   "GpSimd": 3.68,
+   "Tensor": 0.0,
+   "Scalar": 2.39,
+   "TensorMatrix": 0.0,
+   "Sync": 0.02
+  }
+ },
+ "attn.qk_rope": {
+  "wall_us": 0.9876947916666663,
+  "union_us": 1.9496041666666668,
+  "dma_us": 1.3488541666666667,
+  "dma_mb": 0.1579663750000012,
+  "stall_us": 7.849999999999954,
+  "n_per_layer": 21.583333333333332,
+  "busy_us": {
+   "Vector": 3.23,
+   "Sync": 0.06,
+   "GpSimd": 0.08
+  }
+ },
+ "attn.allreduce_gather": {
+  "wall_us": 3.3986701388888876,
+  "union_us": 3.771770833333333,
+  "dma_us": 2.853229166666667,
+  "dma_mb": 0.20926541666671475,
+  "stall_us": 708.7661249999965,
+  "n_per_layer": 34.166666666666664,
+  "busy_us": {
+   "Vector": 1.6,
+   "GpSimd": 3.96,
+   "Sync": 0.05
+  }
+ },
+ "moe.down": {
+  "wall_us": 27.694462152777827,
+  "union_us": 46.02920833333334,
+  "dma_us": 36.793708333333335,
+  "dma_mb": 6.114545541675532,
+  "stall_us": 5259.605812496662,
+  "n_per_layer": 780.1666666666666,
+  "busy_us": {
+   "GpSimd": 52.42,
+   "Tensor": 42.76,
+   "TensorMatrix": 51.28,
+   "Scalar": 2.97,
+   "Vector": 0.74,
+   "Sync": 0.45
+  }
+ },
+ "moe.cc": {
+  "wall_us": 0.04663194444444444,
+  "union_us": 0.060395833333333336,
+  "dma_us": 0.0,
+  "dma_mb": 0.0,
+  "stall_us": 0.0,
+  "n_per_layer": 0.375,
+  "busy_us": {
+   "CC-core_12": 0.06
+  }
+ },
+ "idle": {
+  "wall_us": 27.952541666666665,
+  "dma_active_us": 11.289375,
+  "by_boundary_us": {
+   "attn.cc -> attn.cc": 9.34,
+   "xla.cc -> xla.cc": 6.73,
+   "attn.qkv -> attn.qkv": 2.23,
+   "attn.allreduce_gather -> attn.allreduce_gather": 2.2,
+   "moe.down -> moe.down": 1.57,
+   "moe.gate_up -> moe.gate_up": 1.31,
+   "attn.cc -> attn.allreduce_gather": 0.99,
+   "xla.cc -> attn.cc": 0.55,
+   "xla.ops -> xla.cc": 0.43,
+   "moe.gate_up -> moe.down": 0.34,
+   "moe.down -> moe.gate_up": 0.28,
+   "xla.ops -> xla.ops": 0.27,
+   "attn.core -> attn.core": 0.23,
+   "attn.cc -> attn.core": 0.21,
+   "attn.o_proj -> attn.qkv": 0.18
+  }
+ },
+ "_total": {
+  "wall_us": 192.68989583333334,
+  "n_instr": 188139,
+  "n_dma": 2102367
+ }
+}

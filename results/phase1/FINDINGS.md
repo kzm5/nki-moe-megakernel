@@ -2,6 +2,35 @@
 
 Queue: [`docs/queues/Q1Q2.md`](../../docs/queues/Q1Q2.md). State: [`QUEUE_STATE.md`](QUEUE_STATE.md). Ledger: `~/runs/ledger.jsonl` → [`ledger.jsonl`](ledger.jsonl). Times ET unless marked UTC. Q3 (Nov 19–27, [`docs/queues/Q3.md`](../../docs/queues/Q3.md)): newest Q3 entries directly below.
 
+## 2026-11-19 10:45–11:10 — Q3 T3.1: where E's +38.6 µs/layer goes, E vs C by kernel phase (Measured)
+
+Method: `tools/phase_attrib.py` on the per-instruction JSON (`neuron-profile view --output-format json --ignore-event-trace --ignore-nc-buf-usage`) of the least-skewed rank (vnc_1), TKG bucket 128, seq 768. Each instruction is anchored to a phase by source file + enclosing function (attention_block_tkg / qkv_tkg / attention_tkg / output_projection_tkg / transformer_qwen3_moe_speculative builders / MoE kernels / XLA `module.py`); shared helpers, no-source instructions and DMA records take the phase of the nearest anchored instruction in time. Wall = fair-share sweep over all engine instruction intervals (sums to the step time); "idle" = no engine instruction running (split by whether DMA is in flight). E: the T9 NTFF (`~/runs/prof/p1_prof_E_s768`). **C: the Phase-0 NTFFs had been deleted (Nov 11), so C was re-profiled** with the same `profile_decode.py` (`~/runs/prof/run_prof.sh p1_prof_C_s768 nki …s768_greedy 768`, 2.3 min device, peak RSS 120 GiB). Totals reproduce T9: E 231.3, C 192.7 µs/layer (T9: 192.5). → `results/phase1/t3/{E,C}_s768_b128_phase.json`.
+
+| Phase | E wall | C wall | E − C | E DMA µs / MB | C DMA µs / MB |
+|---|---|---|---|---|---|
+| idle (no engine busy) | 45.0 | 28.0 | **+17.1** | 28.4 with DMA in flight | 11.3 with DMA in flight |
+| attn.qkv | 19.9 | 13.4 | **+6.5** | 28.2 / 3.81 | 12.7 / 4.97 |
+| attn.x_load_y_store (E's X load, Y store) | 5.2 | 0.0 | +5.2 | 4.6 / 0.25 | – |
+| xla.ops (graph glue) | 11.8 | 7.2 | +4.7 | 14.9 / 5.54 | 15.6 / 4.95 |
+| attn.mask_build | 4.3 | 1.0 | **+3.4** | 3.6 / 0.37 | 0.2 / 0.02 |
+| moe.other | 8.8 | 5.7 | +3.1 | 7.0 / 0.83 | 6.3 / 0.77 |
+| attn.rope_build | 2.7 | 0.0 | **+2.7** | 3.7 / 0.40 | 0.4 / 0.04 |
+| moe.router | 12.6 | 10.2 | +2.4 | 6.5 / 1.54 | 4.6 / 0.70 |
+| attn.block_other | 5.9 | 3.9 | +1.9 | 19.7 / 1.22 | 4.8 / 0.56 |
+| moe.cc | 1.8 | 0.0 | +1.8 | – | – |
+| attn.o_proj / attn.cc / qk_rope | 6.6 / 4.6 / 1.1 | 6.0 / 4.0 / 1.0 | +0.6 / +0.5 / +0.1 | | |
+| moe.gate_up / moe.down | 53.3 / 27.0 | 53.5 / 27.7 | −0.2 / −0.7 | 60.1 / 12.86, 34.9 / 5.33 | 60.9 / 13.38, 36.8 / 6.11 |
+| attn.kv_update / qk_norm / allreduce_gather / core | 1.3 / 2.6 / 2.6 / 9.5 | 1.6 / 3.2 / 3.4 / 10.9 | −0.3 / −0.6 / −0.8 / −1.4 | | |
+| xla.cc | 4.8 | 8.1 | −3.3 | – | – |
+| mk.body (C's in-kernel layer glue) | 0.0 | 3.9 | −3.9 | – | 3.1 / 0.73 |
+| **total** | **231.3** | **192.7** | **+38.6** | | |
+
+- **Measured — cause 1, per-call mask/RoPE build (~20 µs/layer):** E rebuilds the attention mask and permuted cos/sin in HBM on every call (`_build_full_mask_hbm`, `_build_permuted_rope_hbm_from_pos`: +3.4 +2.7 µs of instructions). Their element-strided DMAs run on **software DGE** (`software_dynamic` queue Q2 on all 16 DMA engines, ~0.85 MB/layer moved in ~13.6 µs), and the attention block's first consumer, `_to_sbuf(cos/sin)` at `attention_block_tkg.py:859`, waits on them: gaps > 3 µs total 17.0 µs/layer in E, **15.5 µs of it ending at line 859** (preceded by `qkv_tkg.py:1488`, the QKV weight DMA); C has 1.3 µs/layer of such gaps. With block_other's +1.9 (its DMAs wait on the same loads), cause 1 ≈ 3.4 + 2.7 + 1.9 + ~13 ≈ 20 µs/layer ≈ 1.0 ms/step. C builds the tables once per step (1.0 µs/layer amortized).
+- **Measured — cause 2, QKV weight load (+6.5 µs/layer):** E's QKV phase spends 28.2 µs DMA-active for 3.8 MB vs C's 12.7 µs for 5.0 MB; C streams the next layer's weights while the previous layer runs, E cannot prefetch across the call boundary.
+- **Measured — cause 3, unfused glue (~+6 µs/layer):** E's X load / Y store (+5.2) and XLA glue ops (+4.7), against C's in-kernel layer body (3.9).
+- **Measured — not attention (~+4 µs/layer):** E uses the library MoE kernel, C its vendored MoE: router +2.4, other +3.1, MoE CC +1.8 vs XLA CC −3.3.
+- Hypothesis (T3.2 tests it): hoisting the mask/RoPE build to once per step recovers ~20 µs/layer (~1 ms/step at 768), about half of E − C.
+
 ## 2026-11-19 10:40–10:58 — Q3 T2.1: router precision emulated in a bf16 CPU model; T2.2 skipped by rule
 
 `~/runs/run_py.sh p1_t2_router_emul tools/router_emul.py --out ~/runs/p1/t2/router_emul.json` (CPU, 15.6 min, 4.7 GiB) → `results/phase1/router_emul.json`. Whole model in bf16 (weights, activations, residual stream; HF layers, CPU AMX), only the router varied; scored against the frozen golden with the validator's own `kl` / `valid_top8` (tie-tolerant flip rule) over all 7,264 corpus positions × 48 layers, plus the 16 × 512 perplexity set.

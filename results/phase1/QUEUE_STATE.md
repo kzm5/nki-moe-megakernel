@@ -1,6 +1,6 @@
 # Q1+Q2 queue state (source of truth; queue: `docs/queues/Q1Q2.md`, read-only)
 
-Updated: 2026-11-18 23:30 ET. **Q1 and Q2 done** (deadlines Thu Nov 19 12:00 / Sun Nov 22 12:00). Summary: `SUMMARY_Q1Q2.md`. Device idle.
+Updated: 2026-11-19 00:20 ET. **Q1, Q2 and the early-finish items (H2.6, H2.2) done** (deadlines Thu Nov 19 12:00 / Sun Nov 22 12:00). Summary: `SUMMARY_Q1Q2.md`. Device idle, no jobs running; session stopped awaiting Q3 (kernel-edit approval pending).
 
 ## Environment
 - Worktree `~/nki-moe-megakernel/.claude/worktrees/q1q2` (branch `worktree-q1q2`); before every push `git pull --no-rebase mine phase0/trn2-setup`, then `git push mine HEAD:phase0/trn2-setup` (rule changed Nov 18; merges fine).
@@ -22,7 +22,7 @@ Updated: 2026-11-18 23:30 ET. **Q1 and Q2 done** (deadlines Thu Nov 19 12:00 / S
 | T7 validator on E | done: passes v1.1 | `reports_v11/E_*.json` |
 | T8 B/C/E | done (768/2048/4096) | `results/phase1/bench_bce.json` |
 | T8b null-kernel / C-flags | done | `results/phase1/bench_t8b.json`; `null_nki.py`, `qwen_null_nki.py`, `qwen_attn_e_cflags.py` |
-| T9 profile E | done | `results/phase1/E_s768.json`, `~/runs/prof/p1_prof_E_s768` (983 MB raw) |
+| T9 profile E | done | `results/phase1/E_s768.json`, `~/runs/prof/p1_prof_E_s768` (983 MB raw NTFFs; **keep — needed by Q3 T3**, deletion declined by Kevin Nov 19) |
 | T10 trn3 script | written, not run | `scripts/trn3_bringup.{sh,md}`, `tools/bench_only.py` |
 | T11 skill audit | done | `results/phase1/SKILL_AUDIT.md`, `tests/skill_audit/` |
 | H2.6 | done | `results/phase1/error_budget/xla_B_E.{json,csv}` |

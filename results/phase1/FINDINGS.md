@@ -2,7 +2,7 @@
 
 Queue: [`docs/queues/Q1Q2.md`](../../docs/queues/Q1Q2.md). State: [`QUEUE_STATE.md`](QUEUE_STATE.md). Ledger: `~/runs/ledger.jsonl` → [`ledger.jsonl`](ledger.jsonl). Times ET unless marked UTC. Q3 (Nov 19–27, [`docs/queues/Q3.md`](../../docs/queues/Q3.md)): newest Q3 entries directly below.
 
-## 2026-11-19 10:40–11:10 — Q3 T2.1: router precision emulated in a bf16 CPU model; T2.2 skipped by rule
+## 2026-11-19 10:40–10:58 — Q3 T2.1: router precision emulated in a bf16 CPU model; T2.2 skipped by rule
 
 `~/runs/run_py.sh p1_t2_router_emul tools/router_emul.py --out ~/runs/p1/t2/router_emul.json` (CPU, 15.6 min, 4.7 GiB) → `results/phase1/router_emul.json`. Whole model in bf16 (weights, activations, residual stream; HF layers, CPU AMX), only the router varied; scored against the frozen golden with the validator's own `kl` / `valid_top8` (tie-tolerant flip rule) over all 7,264 corpus positions × 48 layers, plus the 16 × 512 perplexity set.
 

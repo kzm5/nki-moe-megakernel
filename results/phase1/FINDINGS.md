@@ -2,13 +2,13 @@
 
 Queue: [`docs/queues/Q1Q2.md`](../../docs/queues/Q1Q2.md). State: [`QUEUE_STATE.md`](QUEUE_STATE.md). Ledger: `~/runs/ledger.jsonl` → [`ledger.jsonl`](ledger.jsonl). Times ET unless marked UTC. Q3 (Nov 19–27, [`docs/queues/Q3.md`](../../docs/queues/Q3.md)): newest Q3 entries directly below.
 
-## 2026-11-19 10:50–11:05 — Q3 T1: skill fixes (doc-only, commit `2af2cf5`)
+## 2026-11-19 10:37–10:39 — Q3 T1: skill fixes (doc-only, commit `2af2cf5`)
 
 - Re-verified on SDK 2.29 before editing (Measured): `nisa.dge_mode` members `hwdge, none, swdge, unknown`; `nki.jit(k, platform_target='trn2')` raises `ValueError … deprecated. Use NEURON_PLATFORM_TARGET_OVERRIDE`.
 - nki-kernel-optimizer: `hw_dge` → `hwdge` (trn2-architecture.md ×2); `platform_target=` removed from quickref ×2, benchmarking-api ×2, benchmark.py docstrings ×3 (env var instead); venv → `~/venv-neuron-229/activate-neuron.sh` (SKILL.md, templates.md); `nki.simulate` bf16 caveat in SKILL.md Correctness; "trn3 only (NCC_IBIR530)" on `nc_matmul_mx` / `quantize_mx`; header says trn2.
 - neuron-profile: JSON `timestamp`/`duration`/`evt_wait_time` in ns (not ps), `--show-trace` in ps; clock ~1.2 GHz measured; CC-core id is per rank (12–15 seen, not 8) in SKILL.md and layer_latency.md; new "Multiple ranks and LNC=2" section in reading_the_profiler.md (least-skewed rank, LNC=2 union/sum semantics).
 
-## 2026-11-19 10:40 — Q3 state on start (Measured)
+## 2026-11-19 10:37 — Q3 state on start (Measured)
 
 - Commit `5f2c1b4` (remote tip of `phase0/trn2-setup`); worktree `.claude/worktrees/q3` (branch `worktree-q3`, pushed as `HEAD:phase0/trn2-setup`); the frozen validator stays in `.claude/worktrees/q1q2` and runs from there.
 - No device or CPU job running; `neuron-ls` idle (1 device, 4 logical cores, LNC=2). RAM 120 GiB available of 124.

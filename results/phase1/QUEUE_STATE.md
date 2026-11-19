@@ -34,7 +34,7 @@ XLA `traced_xla_trn2_229_s768_greedy` (production), `…_vcap` (validator captur
 
 # Q3 queue state (queue: `docs/queues/Q3.md`, read-only; Nov 19–27)
 
-Updated: 2026-11-19 10:45 ET. Checkpoint `SUMMARY_Q3_mid.md` due Sun Nov 22 12:00 ET; Q3 done Fri Nov 27 12:00 ET.
+Updated: 2026-11-19 10:40 ET. Checkpoint `SUMMARY_Q3_mid.md` due Sun Nov 22 12:00 ET; Q3 done Fri Nov 27 12:00 ET.
 
 ## Environment
 - Results worktree `.claude/worktrees/q3` (branch `worktree-q3`; `git pull --no-rebase mine phase0/trn2-setup`, then `git push mine HEAD:phase0/trn2-setup`). Kernel work: worktrees on `q3/<task>` branches, pushed to `mine`, never merged here.
@@ -43,8 +43,8 @@ Updated: 2026-11-19 10:45 ET. Checkpoint `SUMMARY_Q3_mid.md` due Sun Nov 22 12:0
 ## Tasks
 | Task | Status | Paths |
 |---|---|---|
-| Start of session | done Nov 19 10:45 | FINDINGS "Q3 state on start"; CLAUDE.md reading list → Q3 |
-| T1 fix skills | done Nov 19 11:05 (`2af2cf5`, doc-only) | `.claude/skills/{nki-kernel-optimizer,neuron-profile}` |
+| Start of session | done Nov 19 10:37 | FINDINGS "Q3 state on start"; CLAUDE.md reading list → Q3 |
+| T1 fix skills | done Nov 19 10:39 (`2af2cf5`, doc-only) | `.claude/skills/{nki-kernel-optimizer,neuron-profile}` |
 | T2.1 fp32 router emulation | pending | |
 | T2.2 fp32 router kernel | pending (decision rule after T2.1) | |
 | T3.1 E vs C attribution | pending | |

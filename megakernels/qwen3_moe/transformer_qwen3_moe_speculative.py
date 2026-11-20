@@ -312,17 +312,18 @@ def _store_shard_interleaved_sb_to_hbm(dst_hbm, src_sb, B, S_tkg, prg_id):
         )
 
 
-def _sum_partials(dst, src, W):
-    """dst = sum of the TP_DEGREE [H0, W] column blocks of src, accumulated in fp32."""
+def _sum_partials(dst, src, W, residual=None):
+    """dst = sum of the TP_DEGREE [H0, W] column blocks of src (+ residual), accumulated in fp32."""
     acc_sb = nl.ndarray((H0, W), dtype=nl.float32, buffer=nl.sbuf)
     nisa.tensor_tensor(dst=acc_sb, data1=src[:, 0:W], data2=src[:, W:2 * W], op=nl.add)
-    for r in range(2, TP_DEGREE - 1):
+    last = TP_DEGREE if residual is not None else TP_DEGREE - 1
+    for r in range(2, last):
         nisa.tensor_tensor(dst=acc_sb, data1=acc_sb, data2=src[:, r * W:(r + 1) * W], op=nl.add)
-    nisa.tensor_tensor(dst=dst, data1=acc_sb,
-                       data2=src[:, (TP_DEGREE - 1) * W:TP_DEGREE * W], op=nl.add)
+    tail = residual if residual is not None else src[:, (TP_DEGREE - 1) * W:TP_DEGREE * W]
+    nisa.tensor_tensor(dst=dst, data1=acc_sb, data2=tail, op=nl.add)
 
 
-def _sb2sb_all_gather_reduce(ag_src_sb, dtype, rg, prg_id, n_prgs, BxS):
+def _sb2sb_all_gather_reduce(ag_src_sb, dtype, rg, prg_id, n_prgs, BxS, residual_sb=None):
     """All-reduce as SB2SB all-gather + local sum, with the LNC exchange on the raw partials.
 
     Computes:
@@ -330,6 +331,7 @@ def _sb2sb_all_gather_reduce(ag_src_sb, dtype, rg, prg_id, n_prgs, BxS):
     Note:
         ``ag_src_sb`` must not be rewritten until the next same-stage call (peers may still read it).
         Partials are summed in fp32 with one rounding to ``dtype``.
+        With ``residual_sb`` and BxS == 1, accumulates into it in place and returns it.
     """
     W = H1_SHARD * BxS
     ag_sb = nl.ndarray((H0, TP_DEGREE * W), dtype=dtype, buffer=nl.sbuf)
@@ -346,6 +348,14 @@ def _sb2sb_all_gather_reduce(ag_src_sb, dtype, rg, prg_id, n_prgs, BxS):
             recv_from_rank=other,
             pipe_id=0,
         )
+    if residual_sb is not None and BxS == 1:
+        own = residual_sb[:, nl.ds(prg_id * W, W)]
+        _sum_partials(own, ag_sb, W, residual=own)
+        if n_prgs > 1:
+            oth = residual_sb[:, nl.ds(other * W, W)]
+            _sum_partials(oth, peer_sb, W, residual=oth)
+        return residual_sb
+
     _sum_partials(gathered_sb[:, nl.ds(prg_id * W, W)], ag_sb, W)
     if n_prgs > 1:
         _sum_partials(gathered_sb[:, nl.ds(other * W, W)], peer_sb, W)
@@ -511,7 +521,8 @@ def _multilayer_body(
         if _AG_REDUCE:
             nisa.tensor_copy(dst=ag_src_attn_sb, src=attn_sharded_sb)
             attn_gathered_sb = _sb2sb_all_gather_reduce(
-                ag_src_attn_sb, dtype, rg, prg_id, n_prgs, BxS)
+                ag_src_attn_sb, dtype, rg, prg_id, n_prgs, BxS,
+                residual_sb=residual_sb if BxS == 1 else None)
         else:
             attn_gathered_sb, _ = _sb2sb_all_reduce_gather(
                 attn_sharded_sb, dtype, rg, prg_id, n_prgs, H0, H1, H1_SHARD, BxS
@@ -523,8 +534,9 @@ def _multilayer_body(
         sbm.set_auto_alloc(True)
 
         # Residual add #1
-        nisa.tensor_tensor(dst=residual_sb, data1=residual_sb,
-                           data2=attn_gathered_sb, op=nl.add)
+        if not (_AG_REDUCE and BxS == 1):
+            nisa.tensor_tensor(dst=residual_sb, data1=residual_sb,
+                               data2=attn_gathered_sb, op=nl.add)
 
         # ===== MoE block ==================================================
         sbm.set_name_prefix(f"L{layer_idx}_moe_")
@@ -615,15 +627,19 @@ def _multilayer_body(
             moe_sharded_sb = nl.ndarray((H0, H1_SHARD * BxS), dtype=dtype,
                                          buffer=nl.sbuf,
                                          name=f"L{layer_idx}_moe_sharded_sb")
-        for h1s in range(H1_SHARD):
-            nisa.tensor_copy(
-                dst=moe_sharded_sb[:, h1s * BxS : (h1s + 1) * BxS],
-                src=moe_out_sb[:, :, h1s],
-            )
+        if _AG_REDUCE and BxS == 1:
+            nisa.tensor_copy(dst=moe_sharded_sb.reshape((H0, BxS, H1_SHARD)), src=moe_out_sb)
+        else:
+            for h1s in range(H1_SHARD):
+                nisa.tensor_copy(
+                    dst=moe_sharded_sb[:, h1s * BxS : (h1s + 1) * BxS],
+                    src=moe_out_sb[:, :, h1s],
+                )
 
         if _AG_REDUCE:
             moe_gathered_sb = _sb2sb_all_gather_reduce(
-                moe_sharded_sb, dtype, rg, prg_id, n_prgs, BxS)
+                moe_sharded_sb, dtype, rg, prg_id, n_prgs, BxS,
+                residual_sb=residual_sb if BxS == 1 else None)
         else:
             moe_gathered_sb, _ = _sb2sb_all_reduce_gather(
                 moe_sharded_sb, dtype, rg, prg_id, n_prgs, H0, H1, H1_SHARD, BxS
@@ -634,8 +650,9 @@ def _multilayer_body(
         sbm.set_auto_alloc(True)
 
         # Residual add #2
-        nisa.tensor_tensor(dst=residual_sb, data1=residual_sb,
-                           data2=moe_gathered_sb, op=nl.add)
+        if not (_AG_REDUCE and BxS == 1):
+            nisa.tensor_tensor(dst=residual_sb, data1=residual_sb,
+                               data2=moe_gathered_sb, op=nl.add)
 
     # Single HBM store of the post-residual hidden state (inverse of X load).
     Y = nl.ndarray((B, S_tkg, H), dtype=dtype, buffer=nl.shared_hbm, name="Y")

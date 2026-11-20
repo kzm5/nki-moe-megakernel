@@ -313,26 +313,33 @@ def _store_shard_interleaved_sb_to_hbm(dst_hbm, src_sb, B, S_tkg, prg_id):
         )
 
 
-def _sb2sb_all_reduce_residual_add(sharded_sb, residual_sb, dtype, rg, prg_id, n_prgs):
-    """``residual_sb += all_reduce(sharded_sb)`` gathered across LNC shards (BxS == 1).
+def _sb2sb_all_reduce_residual_add(sharded_sb, residual_sb, dtype, rg, prg_id, n_prgs, out_sb=None):
+    """``out_sb = residual_sb + all_reduce(sharded_sb)`` gathered across LNC shards (BxS == 1).
 
     Each core adds its own H shard, then swaps the updated shard with the other
-    core directly into ``residual_sb``.
+    core directly into ``out_sb``. ``out_sb=None`` updates ``residual_sb`` in place;
+    otherwise ``residual_sb`` is refreshed from ``out_sb`` after the swap.
     """
+    in_place = out_sb is None
+    if in_place:
+        out_sb = residual_sb
     ar_sb = nl.ndarray(sharded_sb.shape, dtype=dtype, buffer=nl.sbuf)
     nccl.all_reduce(dsts=[ar_sb], srcs=[sharded_sb], op=nl.add, replica_group=rg)
-    own = residual_sb[:, nl.ds(prg_id * H1_SHARD, H1_SHARD)]
-    nisa.tensor_tensor(dst=own, data1=own, data2=ar_sb, op=nl.add)
+    own_slice = nl.ds(prg_id * H1_SHARD, H1_SHARD)
+    own = out_sb[:, own_slice]
+    nisa.tensor_tensor(dst=own, data1=residual_sb[:, own_slice], data2=ar_sb, op=nl.add)
     if n_prgs > 1:
         other = 1 - prg_id
         nisa.sendrecv(
             src=own,
-            dst=residual_sb[:, nl.ds(other * H1_SHARD, H1_SHARD)],
+            dst=out_sb[:, nl.ds(other * H1_SHARD, H1_SHARD)],
             send_to_rank=other,
             recv_from_rank=other,
             pipe_id=0,
             dma_engine=nisa.dma_engine.gpsimd_dma,
         )
+    if not in_place:
+        nisa.tensor_copy(dst=residual_sb, src=out_sb)
 
 
 def _multilayer_body(
@@ -408,6 +415,8 @@ def _multilayer_body(
     )
 
     fused_ar = AGENT_VARIANT and BxS == 1
+    # Next layer's attention input, written directly by the MoE all-reduce swap.
+    next_attn_in_sb = None
 
     for layer_idx in range(num_layers):
         # ===== Attention ==================================================
@@ -415,9 +424,12 @@ def _multilayer_body(
         sbm.set_auto_alloc(True)
 
         # attention_block_tkg's fused RMSNorm overwrites its input; preserve residual.
-        attn_in_sb = nl.ndarray((H0, BxS * H1), dtype=dtype, buffer=nl.sbuf,
-                                 name=f"L{layer_idx}_attn_in_sb")
-        nisa.tensor_copy(attn_in_sb, residual_sb)
+        if next_attn_in_sb is not None:
+            attn_in_sb = next_attn_in_sb
+        else:
+            attn_in_sb = nl.ndarray((H0, BxS * H1), dtype=dtype, buffer=nl.sbuf,
+                                     name=f"L{layer_idx}_attn_in_sb")
+            nisa.tensor_copy(attn_in_sb, residual_sb)
         X_sb = attn_in_sb.reshape((H0, BxS, H1))
 
         # reshape to [1, *] views the subkernels expect
@@ -583,8 +595,12 @@ def _multilayer_body(
         )
         if fused_ar:
             # BxS == 1: [H0, 1, H1_SHARD] is already the [H0, H1_SHARD] AR layout.
+            if layer_idx + 1 < num_layers:
+                next_attn_in_sb = nl.ndarray((H0, BxS * H1), dtype=dtype, buffer=nl.sbuf,
+                                             name=f"L{layer_idx + 1}_attn_in_sb")
             _sb2sb_all_reduce_residual_add(
-                moe_out_sb.reshape((H0, H1_SHARD)), residual_sb, dtype, rg, prg_id, n_prgs
+                moe_out_sb.reshape((H0, H1_SHARD)), residual_sb, dtype, rg, prg_id, n_prgs,
+                out_sb=next_attn_in_sb if layer_idx + 1 < num_layers else None,
             )
             while sbm.heap:
                 sbm.pop_heap()

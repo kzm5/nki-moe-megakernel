@@ -1,6 +1,6 @@
 # Q1+Q2 queue state (source of truth; queue: `docs/queues/Q1Q2.md`, read-only)
 
-Updated: 2026-11-19 22:45 ET. **Q1, Q2 and the early-finish items (H2.6, H2.2) done** (deadlines Thu Nov 19 12:00 / Sun Nov 22 12:00). Summary: `SUMMARY_Q1Q2.md`. Device idle, no jobs running; session stopped awaiting Q3 (kernel-edit approval pending).
+Updated: 2026-11-20 10:52 ET. **Q1, Q2 and the early-finish items (H2.6, H2.2) done** (deadlines Thu Nov 19 12:00 / Sun Nov 22 12:00). Summary: `SUMMARY_Q1Q2.md`. Device idle, no jobs running; session stopped awaiting Q3 (kernel-edit approval pending).
 
 ## Environment
 - Worktree `~/nki-moe-megakernel/.claude/worktrees/q1q2` (branch `worktree-q1q2`); before every push `git pull --no-rebase mine phase0/trn2-setup`, then `git push mine HEAD:phase0/trn2-setup` (rule changed Nov 18; merges fine).
@@ -34,7 +34,7 @@ XLA `traced_xla_trn2_229_s768_greedy` (production), `…_vcap` (validator captur
 
 # Q3 queue state (queue: `docs/queues/Q3.md`, read-only; Nov 19–27)
 
-Updated: 2026-11-19 22:45 ET. Checkpoint `SUMMARY_Q3_mid.md` due Sun Nov 22 12:00 ET; Q3 done Fri Nov 27 12:00 ET.
+Updated: 2026-11-20 10:52 ET. Checkpoint `SUMMARY_Q3_mid.md` due Sun Nov 22 12:00 ET; Q3 done Fri Nov 27 12:00 ET.
 
 ## Environment
 - Results worktree `.claude/worktrees/q3` (branch `worktree-q3`; `git pull --no-rebase mine phase0/trn2-setup`, then `git push mine HEAD:phase0/trn2-setup`). Kernel work: worktrees on `q3/<task>` branches, pushed to `mine`, never merged here.
@@ -49,7 +49,7 @@ Updated: 2026-11-19 22:45 ET. Checkpoint `SUMMARY_Q3_mid.md` due Sun Nov 22 12:0
 | T2.2 fp32 router kernel | **skipped by rule** (flips do not fall ≥ 2 pp; the change would be a no-op) | FINDINGS T2.1 |
 | T3.1 E vs C attribution | done Nov 19 11:10: per-call mask/RoPE build (software-DGE stall) ≈ 20 of E's +38.6 µs/layer | `tools/phase_attrib.py`, `results/phase1/t3/` |
 | T3.2 E-copy changes | done Nov 19 20:20: Eh 10.707 vs E 12.255 / C 10.373 / B 10.579 ms (n=5) — 82% of E − C recovered; not within 2σ of C | branch `q3/t3-fusion` (`wt/t3`), `bench_q3_t3.json` |
-| T4 agent study A1/C1(/A2/C2) | harness sanity PASS 10.311 ms (Nov 19 22:40); **A1 running** 03:42–09:42 UTC Nov 20 (`wt/a1`, branch `q3/t4-a1`); then C1 | `tools/agent_eval.sh`, `results/phase1/t4/`, `~/runs/agents/<run>/` |
+| T4 agent study A1/C1(/A2/C2) | A1 done (best 10.101 ms, 3/3 pass); C1 done (best eligible 10.023 ms iter 2; iter 1 race → invalid; iter 3 fails worst_pos); **A2 running** 15:50–21:50 UTC Nov 20, then C2; then final interleaved bench (best variants vs C, B; n=5) | `tools/agent_eval.sh`, `results/phase1/t4/`, branches `q3/t4-{a1,c1,a2,c2}` |
 | Mid summary | written Nov 19 (T1–T3 complete) | `SUMMARY_Q3_mid.md` |
 | Wrap-up | due Nov 27 12:00 | |
 
@@ -58,3 +58,8 @@ Updated: 2026-11-19 22:45 ET. Checkpoint `SUMMARY_Q3_mid.md` due Sun Nov 22 12:0
 - Root EBS stays at 3,000 IOPS: avoid swap. Pre-shard C (`traced_nki_trn2_229_s768_greedy`, the build loaded most in Q3) with `~/runs/val/preshard.py` after the T3 bench; load pre-sharded builds with `--save-sharded-checkpoint --skip-sharding` (the first makes NxDI read `weights/`). The frozen `device.py` cannot pass these flags, so validator loads still shard on load (page cache pre-warmed first).
 - Kevin (Nov 20 ~00:30 ET): set `vm.swappiness=10` himself (runtime only); approved `MK_LOAD_PRESHARDED=1` in `main.py` (`a59ace1`, default off: with `--skip-compile` and an existing `weights/` it sets `save_sharded_checkpoint` / `skip_sharding`). Before any scored use: frozen validator on C's build with the hook and sharding on load, outputs bit-identical 64/64 (`tools/check_preshard_hook.sh`, runs after A1's 09:42 UTC deadline so it takes no device time from A1). If it passes, merge the hook into C1's worktree before launch; A1 is not restarted. The hook is a no-op for fresh agent builds (no `weights/`); pre-sharding each agent build (59 GB, ~990 s) would cost more than its one validator load.
 - Baseline for the next validator load: Eh's load took 2,537 s (42 min; the 57 min reported earlier included the 888 s compile).
+
+## T4 rules in force
+- Non-deterministic variants (run-to-run ≠ 64/64) are reported separately, never as the best validated result (Kevin, Nov 20).
+- A runtime-forced early hand-back is resumed with a neutral message and the deadline is extended by the idle time; active and wall time are reported for every run (Kevin, Nov 20).
+- Disk 99 GB free on Nov 20 10:50 ET (validator dirs ~4.2 GB each, 112 GB total; compile cache 72 GB, active). Enough for A2/C2; pre-sharding the final-bench candidates (59 GB each) would need deletions — not planned.

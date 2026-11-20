@@ -21,3 +21,12 @@
 - 23:10 ET — T9 done (E's +1.8 ms is device time); T11 done (both skills give right numbers, several verified wrong instructions; optimized kernel bf16 bit-identical on device). **T8b: null NKI call per layer costs 0.17 ms/step (≈3.5 µs/call) = 10% of E's +1.69 ms → not the mechanism; C's flags change nothing (−0.04 ms).** H2.6 done: NKI builds start 30% more accurate at L0, converge by L47; all damp after L33–34.
 - 17:35 ET — T8 done (4096: B 11.12, C 10.40, E 12.56 ms; C vs B 0.20/0.59/0.72 ms at 768/2048/4096). Rescore: under v1.1 **B, C, E pass**, Gate 1 still met (m1/m2/m4 caught, m3 passes). Found that `*.json` is gitignored — 17 Phase 1 JSONs had never been pushed; force-added (4d83e8d). Deleted the 6 approved builds (9.8 GB). Now: T9 profile E, then T8b.
 - 14:10 ET — Kevin's decisions applied: spec v1.1 (worst_pos needs a top-1 change) written and re-frozen with v1.0 kept; rescoring all builds under both after T8 4096; T8b (null NKI kernel per layer; E with C's flags) queued after T9.
+
+## 2026-11-20 (Fri, 05:25 ET) — Q3 day 1
+- Done: T1 skill fixes (`2af2cf5`). T2: fp32 router logits + top-k are already in B, C and XLA; bf16 CPU emulation vs bf16 logits: KL −21.6%, strict flips −2.98 pp, tie-tolerant flips +1.36 pp → **T2.2 skipped by rule** (would be a no-op).
+- Done: T3.1 attribution E vs C (C re-profiled): ~20 of E's +38.6 µs/layer is the per-call mask/RoPE build (software-DGE DMAs stall the attention block and the QKV weight load). T3.2 Eh (built once per step): passes v1.1, bit-identical to E; **10.707 vs E 12.255 / C 10.373 / B 10.579 ms (n=5) → 82% of E − C recovered**, still +0.335 ms vs C (> 2σ), ≈ B.
+- Done: SUMMARY_Q3_mid.md (T1–T3) — two days before the checkpoint.
+- Done: T4 harness sanity on the unmodified megakernel (PASS, 10.311 ms); **A1 (setup A): 3 iterations, all pass, best 10.101 ms (harness n=2), first improvement after 2 h 20 min, 0 interventions.** C1 (setup C) running 10:21–16:21 UTC.
+- Kevin's decisions applied: disk 678 GB (JSONs kept); C pre-sharded (59 GB); swappiness 10 (Kevin); `MK_LOAD_PRESHARDED=1` hook bit-identical 64/64 + 16/16, load 149 s vs 806 s sharding on load (2,049 s before swappiness 10; Eh's cold load 2,537 s).
+- Next: C1 → decide on A2/C2 → final interleaved bench of the best variant vs C and B (n=5).
+- Blockers: none.

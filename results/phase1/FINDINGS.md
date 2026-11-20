@@ -2,6 +2,29 @@
 
 Queue: [`docs/queues/Q1Q2.md`](../../docs/queues/Q1Q2.md). State: [`QUEUE_STATE.md`](QUEUE_STATE.md). Ledger: `~/runs/ledger.jsonl` → [`ledger.jsonl`](ledger.jsonl). Times ET unless marked UTC. Q3 (Nov 19–27, [`docs/queues/Q3.md`](../../docs/queues/Q3.md)): newest Q3 entries directly below.
 
+## 2026-11-19 22:42 → 2026-11-20 04:39 ET — Q3 T4 run A1 (setup A: compile errors + validator PASS/FAIL + TKG p50) (Measured)
+
+Fresh general-purpose subagent with the nki-kernel-optimizer skill, prompt `results/phase1/t4/prompt_template.md` (setup A), worktree `wt/a1` from `7fd70dc`, budget 6 h (03:42–09:42 UTC). Orchestrator gave no hints beyond the setup. Harness records: `results/phase1/t4/a1_{1,2,3}/`; diff vs start `results/phase1/t4/a1.diff`; branch `q3/t4-a1` pushed.
+
+| Iter | Commit | Change (agent's description) | Compile | Validator v1.1 | TKG p50 (n=2) |
+|---|---|---|---|---|---|
+| 1 | `550ba57` | per all-reduce: each LNC core adds the AR result into its own H-half of `residual_sb`, then swaps halves directly into `residual_sb` via `sendrecv` on `gpsimd_dma` (SBUF→SBUF); drops the gather copy, the identity rearrange copy, the separate residual add and 8 MoE-output transpose copies (BxS=1) | 897 s | PASS | 10.128 |
+| 2 | `3ff90a7` | + the MoE swap writes the next layer's attention input directly; `residual_sb` refreshed off the critical path | 703 s | PASS | 10.103 |
+| 3 | `00b7b0b` | + residual swaps on their own `sendrecv` pipe (`pipe_id=1`) | 702 s | PASS | **10.101** |
+
+| Metric (A1) | Value |
+|---|---|
+| Iterations / compiles | 3 / 3 (all compiled, all passed v1.1) |
+| Device time | 5 h 55 min (harness wall 03:43–09:39 UTC; the device was held throughout) |
+| Best validated latency | 10.101 ms (iter 3; harness n=2; unmodified megakernel in the harness 10.311, T3 session C 10.373 ± 0.094) |
+| First validated improvement | iter 1, feedback at 06:02 UTC = 2 h 20 min after start |
+| Blocked attempts on frozen paths | none (self-report; diff touches only `transformer_qwen3_moe_speculative.py`, +90/−32, gated by `MK_AGENT_VARIANT=1` and BxS == 1) |
+| Other blocked tool calls | 2, harness policy, not validator-related: a chained `sleep` (sleep rule) and a Monitor loop (worktree isolation) |
+| Human interventions | 0 |
+
+- Hypothesis (to test in the final interleaved bench): A1's ~0.2 ms gain is real — it is ~2× the harness's run-to-run spread and the three iterations are monotone, but the comparison is with other sessions' C numbers.
+- The agent argued the per-layer AR count cannot be reduced (RMSNorm and router/QKV need the full H after each AR; the two ARs per layer are dependent), and that the subkernels' other LNC exchanges cannot use `gpsimd_dma` (partition dim 1 at T=1).
+
 ## 2026-11-19 20:20 → 22:40 ET — C pre-sharded; T4 harness sanity iteration on the unmodified megakernel (Measured)
 
 - **Pre-shard (Kevin's instruction, Nov 19):** `~/runs/val/preshard.py nki …/traced_nki_trn2_229_s768_greedy 768` wrote 4 shards (59 GB) into `weights/` in 990 s (job 17.3 min, peak RSS 121.6 GiB, swap peaked ~40 GB during it). C is now loaded with `--save-sharded-checkpoint --skip-sharding` by `bench_q3.sh` and `agent_eval.sh` (first flag makes NxDI read `weights/`). Logged in the ledger and `~/runs/deletions.log`.

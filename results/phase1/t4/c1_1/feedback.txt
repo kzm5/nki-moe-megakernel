@@ -1,0 +1,47 @@
+COMPILE: OK (Compiling and tracing time: 942.10344600401)
+VALIDATOR v1.1: PASS
+validator report rows:
+  op_boundary {"pass": null, "status": "not_measurable", "why": "no per-layer capture"}
+  router {"pass": null, "status": "not_measurable", "why": "no router capture"}
+  logits_tf {"pass": true, "kl_mean_cand": 0.0021308974001699316, "kl_mean_base": 0.002259803823545254, "kl_ratio": 0.9429568080059756, "top1_golden_cand": 0.9859581589698792, "top1_golden_base": 0.9865087866783142, "n_positions": 7264}
+  worst_pos {"pass": true, "max_kl": 1.0615968835883627, "base_kl_there": 0.028158669899198723, "gross_count": 0}
+  perplexity {"pass": true, "ppl_cand": 8.368556846924964, "ppl_base": 8.39334410426494, "ppl_golden": 8.342472201491121, "rel_delta": -0.002953203994982334, "n_tokens": 8176}
+  run_to_run {"in_process": {"identical": 0, "n": 64, "differ": ["p00", "p01", "p02", "p03", "p04", "p05", "p06", "p07", "p08", "p09", "p10", "p11", "p12", "p13", "p14", "p15", "p16", "p17", "p18", "p19", "p20", "p21", "p22", "p23", "p24", "p25", "p26", "p27", "p28", "p29", "p30", "p31", "p32", "p33", "p34", "p35", "p36", "p37", "p38", "p39", "p40", "p41", "p42", "p43", "p44", "p45", "p46", "p47", "p48", "p49"
+TKG p50: 10.034 ms (runs 10.011, 10.057)   (unmodified megakernel: ~10.29-10.36 ms in recent sessions)
+profile (least-skewed rank, bucket 128; us per layer; NTFF/NEFF in /home/ubuntu/runs/prof/p1_q3_t4_c1_1_prof, instruction JSON /home/ubuntu/runs/agents/c1/1/prof.json):
+phase                         wall   union  dma_us  dma_MB      n Tensor Vector Scalar GpSimd   Sync
+_total                       186.6
+moe.gate_up                   53.5    74.9    61.1  13.385   1747   66.7   13.3   14.8   41.2   71.4
+moe.down                      28.3    46.8    37.1   6.151    782   42.7    0.9    2.9   53.4    0.2
+idle                          23.9  (DMA active 11.1)
+    idle   3.75  xla.cc -> mk.cc
+    idle   3.51  mk.cc -> mk.cc
+    idle   2.75  attn.qkv -> attn.qkv
+    idle   2.70  mk.body -> mk.body
+    idle   2.47  xla.cc -> xla.cc
+    idle   1.70  moe.down -> moe.down
+    idle   1.09  attn.cc -> attn.cc
+    idle   1.05  moe.gate_up -> moe.gate_up
+    idle   0.99  mk.cc -> mk.body
+    idle   0.63  xla.cc -> attn.cc
+    idle   0.45  xla.ops -> xla.cc
+    idle   0.37  xla.ops -> xla.ops
+    idle   0.36  attn.cc -> mk.cc
+    idle   0.32  moe.gate_up -> moe.down
+    idle   0.23  attn.core -> attn.core
+attn.qkv                      13.4    15.6    12.4   5.009    137    3.0   17.7    0.7    5.2    0.2
+moe.router                    10.5    13.8     4.0   0.642    158    5.3   14.5    5.2    2.4    1.3
+xla.ops                        8.8    10.2    13.0   4.855    290   12.6    1.4    6.5   11.4    1.0
+mk.body                        8.4     9.9     6.8   1.244    102    0.8    7.2    2.8    7.8    0.1
+attn.core                      8.4    12.0     4.2   0.523    116    4.4    7.2    7.1    3.8    1.3
+moe.other                      6.0    12.1     6.4   0.858     75    0.0   10.6    2.5    4.4    0.0
+attn.o_proj                    5.9     7.2     2.1   0.482    282   21.1    2.5    0.2    3.3    0.0
+xla.cc                         4.8     5.1     0.0   0.000     24    0.0    0.0    0.0    0.0    0.0
+attn.block_other               3.9     7.9     4.9   0.557     96    2.0    6.8    0.1    2.2    2.6
+attn.qk_norm                   3.1     5.6     3.9   0.607     51    2.1    3.1    1.5    2.6    0.2
+mk.cc                          3.0     3.2     0.0   0.000     16    0.0    0.0    0.0    0.0    0.0
+attn.cc                        1.9     1.9     0.0   0.000      7    0.0    0.0    0.0    0.0    0.0
+attn.kv_update                 1.7     3.3     1.2   0.179     16    0.1    0.0    0.4    3.6    0.0
+attn.qk_rope                   0.9     1.9     1.4   0.179     21    0.0    3.2    0.0    0.0    0.0
+attn.mask_build                0.2     0.5     0.2   0.024      2    0.1    0.1    0.2    0.4    0.0
+attn.rope_build                0.0     0.1     0.3   0.047      0    0.0    0.0    0.0    0.0    0.1

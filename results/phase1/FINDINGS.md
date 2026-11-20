@@ -2,6 +2,14 @@
 
 Queue: [`docs/queues/Q1Q2.md`](../../docs/queues/Q1Q2.md). State: [`QUEUE_STATE.md`](QUEUE_STATE.md). Ledger: `~/runs/ledger.jsonl` → [`ledger.jsonl`](ledger.jsonl). Times ET unless marked UTC. Q3 (Nov 19–27, [`docs/queues/Q3.md`](../../docs/queues/Q3.md)): newest Q3 entries directly below.
 
+## 2026-11-20 05:21 ET → — Q3 T4 run C1 (setup C), in progress (Measured)
+
+- C1 launched 10:21 UTC (budget to 16:21), worktree `wt/c1` = `7fd70dc` + the `main.py` load hook (`689a988`; no-op for fresh builds), same prompt as A1 except the setup block.
+- Iter 1 (`65486dc`): per-layer SBUF all-reduces → SBUF all-gather (4 ranks) + local fp32 sum of the 4 partials, then the LNC exchange. Compile 942 s; **validator v1.1 PASS, but run-to-run 0/64 identical** (all baseline and A1 builds 64/64); KL ratio 0.943, worst position max KL 1.06 (top-1 unchanged), ppl 8.369; **TKG p50 10.034 ms** (10.011, 10.057).
+- **Intervention 1 (orchestrator, 12:13 UTC):** the agent handed back at 11:17 UTC, 56 min into its 6 h budget, while its iteration 1 was still benchmarking, saying it "was told to hand back" (not by the orchestrator). It did not resume after iteration 1 finished (12:02), so it was sent a neutral message: budget runs to 16:21, iteration 1's feedback is complete, continue unchanged. No technical content.
+- **Validator spec gap (for Kevin):** v1.1's `run_to_run` row is non-blocking by design ("documented", `validate.py:12`), so a non-deterministic build passes. Orchestrator rule for T4 (not a spec change): non-deterministic variants are reported but not eligible as the best validated collectives result.
+- The agent's own profile analysis of the baseline: each per-layer all-reduce ≈ 18 (attention) / 21.5 (MoE) µs launch-to-residual-add, of which ~3.7 µs is data transfer (16-byte pieces per partition); the rest is waiting (~5 µs before the first transfer, ~4 µs between phases) plus ~3–4 µs of post-collective copies. The phase table's `xla.cc` rows in the megakernel are the in-kernel MoE all-reduce (its launch instruction comes from `ops.py`).
+
 ## 2026-11-20 04:42 → 05:20 ET — pre-sharded-load hook checked: bit-identical, load 149 s vs 806 s (Measured)
 
 Kevin approved (Nov 20) `vm.swappiness=10` (set by him, runtime) and `MK_LOAD_PRESHARDED=1` in `main.py` (`a59ace1`, default off). `tools/check_preshard_hook.sh`: frozen validator v1.1 on C's pre-sharded build, `MK_DIR=q3`, page cache pre-warmed, run after A1's deadline.

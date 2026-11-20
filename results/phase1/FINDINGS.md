@@ -30,6 +30,26 @@ Harness records `results/phase1/t4/c1_{1,2,3}/`, diff `results/phase1/t4/c1.diff
 - C1's own reading of iter 3: the single-rounding residual update changes numerics at one fragile position; its untested suggestion is to keep iter 3's copy removal with the base's two-step rounding (Hypothesis).
 - Setup C's per-layer ρ report was not available: the megakernel has no per-layer capture (validator `op_boundary` / `router` rows not measurable), so C's extra feedback was the full validator rows + the per-phase profile table.
 
+### C1 iter 1 nondeterminism classified (Kevin's rule; orchestrator analysis, no hints to C1) — verdict: race → invalid
+
+(a) Second teacher-forced capture of the same build with the frozen `device.py` (`tools/r2r_rerun.sh c1 1`, worktree pinned at `65486dc`, Nov 20 15:39–15:47 UTC, load 104 s), compared with the validator's capture (`tools/r2r_compare.py` → `~/runs/p1/val/agent_c1_1_r2r.json`; self-test on a bit-identical pair: 0 differences):
+
+| | C1 iter 1, run 1 vs run 2 | reference: base/1 vs c1/1 (two different AR algorithms) |
+|---|---|---|
+| positions with any logit difference | 6,626 / 7,264 (91%) | 5,965 (82%) |
+| max-abs logit difference | 11.86 | 6.47 |
+| mean KL between the two | **9.4e-4** (= 42% of XLA's KL vs golden, 2.26e-3) | 7.9e-4 |
+| p99 / max KL between the two | 1.18e-2 / 0.133 | 1.04e-2 / 0.101 |
+| top-1 changes | 61 | 52 |
+| each run's mean KL vs golden | 2.13e-3 / 2.17e-3 | 2.17e-3 / 2.13e-3 |
+
+(b) Diff: no barrier, semaphore or explicit dependency removed (neither version has one); the AR algorithm and order changed (`nccl.all_reduce` → `nccl.all_gather` + fixed rank-order fp32 sum + one bf16 rounding).
+
+- **Measured:** run-to-run differences are as large as replacing the AR algorithm outright (bf16-level perturbation amplified through 48 layers); neither run is less accurate than the base vs golden; no gross outliers.
+- **Measured:** the nondeterminism cannot be reduction order: the local sum is fixed-order, and an fp32 sum of 4 bf16 values is exact unless their exponents differ by > 16 bits, so even a varying order would almost never change the result. C1's iter 2 change (a dedicated all-gather buffer per stage) made the output 64/64 bit-identical.
+- **Hypothesis (mechanism):** a cross-rank buffer-reuse hazard — a reused all-gather source/destination address overwritten while another rank's transfer is still in flight; no explicit sync was removed, but `nccl.all_reduce`'s internal ordering was lost.
+- **Verdict: race → invalid** (not "benign reduction-order nondeterminism"): although the magnitudes are bf16-like, a fixed-order sum cannot produce reduction-order nondeterminism, and a buffer change cured it. Reported, never eligible; it is not a determinism-for-0.28 ms trade-off. C1's iter 2 (deterministic, 10.023 ms) supersedes it.
+
 ### Earlier notes from the C1 run
 
 - C1 launched 10:21 UTC (budget to 16:21), worktree `wt/c1` = `7fd70dc` + the `main.py` load hook (`689a988`; no-op for fresh builds), same prompt as A1 except the setup block.

@@ -314,11 +314,15 @@ def _store_shard_interleaved_sb_to_hbm(dst_hbm, src_sb, B, S_tkg, prg_id):
 
 
 def _sb2sb_all_reduce_residual_add(residual_sb, sharded_sb, bs_major, dtype, rg,
-                                   prg_id, n_prgs, BxS):
+                                   prg_id, n_prgs, BxS, mirror_sb=None):
     """``residual_sb += gather_lnc(all_reduce(sharded_sb))``.
 
     sharded_sb: [H0, BxS*H2], F layout (bs, h2) if ``bs_major`` else (h2, bs).
+    mirror_sb: if given, also receives the sum, computed on GpSimd.
     The own-shard add overlaps the LNC sendrecv.
+
+    Returns:
+        The updated residual (a new tensor when ``mirror_sb`` is given).
     """
     ar_sb = nl.ndarray(sharded_sb.shape, dtype=dtype, buffer=nl.sbuf)
     nccl.all_reduce(dsts=[ar_sb], srcs=[sharded_sb], op=nl.add, replica_group=rg)
@@ -333,16 +337,30 @@ def _sb2sb_all_reduce_residual_add(residual_sb, sharded_sb, bs_major, dtype, rg,
         ar_v = ar_sb.reshape((H0, BxS, H2))
     else:
         ar_v = ar_sb.ap(pattern=[[BxS * H2, H0], [1, BxS], [BxS, H2]], offset=0)
+    res_in = residual_sb
+    if mirror_sb is not None:
+        # Fresh output so the Vector and GpSimd adds share only reads.
+        residual_sb = nl.ndarray(res_in.shape, dtype=dtype, buffer=nl.sbuf)
+        mir3 = mirror_sb.reshape((H0, BxS, H1))
+    in3 = res_in.reshape((H0, BxS, H1))
     res3 = residual_sb.reshape((H0, BxS, H1))
-    own = res3[:, :, nl.ds(prg_id * H2, H2)]
-    nisa.tensor_tensor(dst=own, data1=own, data2=ar_v, op=nl.add)
+    f_own = nl.ds(prg_id * H2, H2)
+    if mirror_sb is not None:
+        nisa.tensor_tensor(dst=mir3[:, :, f_own], data1=in3[:, :, f_own], data2=ar_v,
+                           op=nl.add, engine=nisa.gpsimd_engine)
+    nisa.tensor_tensor(dst=res3[:, :, f_own], data1=in3[:, :, f_own], data2=ar_v, op=nl.add)
     if n_prgs > 1:
         if bs_major:
             recv_v = recv_sb.reshape((H0, BxS, H2))
         else:
             recv_v = recv_sb.ap(pattern=[[BxS * H2, H0], [1, BxS], [BxS, H2]], offset=0)
-        oth = res3[:, :, nl.ds(other_lnc * H2, H2)]
-        nisa.tensor_tensor(dst=oth, data1=oth, data2=recv_v, op=nl.add)
+        f_oth = nl.ds(other_lnc * H2, H2)
+        if mirror_sb is not None:
+            nisa.tensor_tensor(dst=mir3[:, :, f_oth], data1=in3[:, :, f_oth], data2=recv_v,
+                               op=nl.add, engine=nisa.gpsimd_engine)
+        nisa.tensor_tensor(dst=res3[:, :, f_oth], data1=in3[:, :, f_oth], data2=recv_v,
+                           op=nl.add)
+    return residual_sb
 
 
 def _multilayer_body(
@@ -423,9 +441,12 @@ def _multilayer_body(
         sbm.set_auto_alloc(True)
 
         # attention_block_tkg's fused RMSNorm overwrites its input; preserve residual.
-        attn_in_sb = nl.ndarray((H0, BxS * H1), dtype=dtype, buffer=nl.sbuf,
-                                 name=f"L{layer_idx}_attn_in_sb")
-        nisa.tensor_copy(attn_in_sb, residual_sb)
+        if AGENT_VARIANT and layer_idx > 0:
+            attn_in_sb = next_attn_in_sb
+        else:
+            attn_in_sb = nl.ndarray((H0, BxS * H1), dtype=dtype, buffer=nl.sbuf,
+                                     name=f"L{layer_idx}_attn_in_sb")
+            nisa.tensor_copy(attn_in_sb, residual_sb)
         X_sb = attn_in_sb.reshape((H0, BxS, H1))
 
         # reshape to [1, *] views the subkernels expect
@@ -491,7 +512,7 @@ def _multilayer_body(
 
         if AGENT_VARIANT:
             # Residual add #1 fused with the AR.
-            _sb2sb_all_reduce_residual_add(
+            residual_sb = _sb2sb_all_reduce_residual_add(
                 residual_sb, attn_sharded_sb, False, dtype, rg, prg_id, n_prgs, BxS
             )
         else:
@@ -592,9 +613,14 @@ def _multilayer_body(
         )
         if AGENT_VARIANT:
             # Residual add #2 fused with the AR; AR runs on the (bs, h2) layout as-is.
-            _sb2sb_all_reduce_residual_add(
+            # Also writes the next layer's attention input in parallel.
+            next_attn_in_sb = None
+            if layer_idx + 1 < num_layers:
+                next_attn_in_sb = nl.ndarray((H0, BxS * H1), dtype=dtype, buffer=nl.sbuf,
+                                              name=f"L{layer_idx + 1}_attn_in_sb")
+            residual_sb = _sb2sb_all_reduce_residual_add(
                 residual_sb, moe_out_sb.reshape((H0, BxS * H1_SHARD)), True,
-                dtype, rg, prg_id, n_prgs, BxS
+                dtype, rg, prg_id, n_prgs, BxS, mirror_sb=next_attn_in_sb
             )
         else:
             # Transpose [H0, BxS, H1_SHARD] → [H0, H1_SHARD*BxS] for _sb2sb_all_reduce_gather.

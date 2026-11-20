@@ -56,6 +56,8 @@ class ActivationQuantizationType(Enum):
 
 
 BENCHMARK_REPORT_FILENAME = "benchmark_report.json"
+# Load a compiled build's pre-sharded weights/ instead of sharding the HF checkpoint on load.
+LOAD_PRESHARDED = os.environ.get("MK_LOAD_PRESHARDED", "0") == "1"
 
 set_random_seed(0)
 
@@ -357,7 +359,10 @@ def parse_args():
     parser.add_argument("--input-start-offsets", nargs="+", default=None, type=int)
     parser.add_argument("--enable-output-completion-notifications", action="store_true")
 
-    return parser.parse_args()
+    args = parser.parse_args()
+    if LOAD_PRESHARDED and args.skip_compile and os.path.isdir(os.path.join(args.compiled_model_path, "weights")):
+        args.save_sharded_checkpoint = args.skip_sharding = True
+    return args
 
 
 def load_json_file(json_path):

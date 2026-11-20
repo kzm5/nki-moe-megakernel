@@ -90,6 +90,7 @@ def qkv_tkg(
     norm_bias: Optional[nl.ndarray] = None,
     hidden_actual: Optional[int] = None,
     sbm: Optional[SbufManager] = None,
+    qkv_w_sb: Optional[nl.ndarray] = None,
 ) -> nl.ndarray | Tuple[nl.ndarray, nl.ndarray]:
     """
     QKV Projection Kernel for Token Generation
@@ -329,6 +330,9 @@ def qkv_tkg(
         .reshape_dim(dim=0, shape=(cfg.num_shards, cfg.H0, cfg.H1_shard))
         .select(dim=0, index=cfg.shard_id)
     )
+    # Prefetched per-shard weights (H0, H1_shard, I) in SBUF replace the HBM load.
+    if qkv_w_sb != None:
+        qkv_w_hbm = TensorView(qkv_w_sb)
 
     # Dispatch to appropriate projection path based output buffer
     if output_in_sbuf:
@@ -1316,6 +1320,7 @@ def _qkv_projection(
 
     # Allocate all temp buffers: weights, PSUMs
     qkv_w_sb, num_w_blocks, result_psum = _allocate_qkv_buffers(
+        alloc_weights=qkv_w_hbm.base_tensor.buffer != nl.sbuf,
         I=I,
         qkv_out_shape=qkv_out_sb.shape,
         output_dtype=output_dtype,
@@ -1361,6 +1366,7 @@ def _allocate_qkv_buffers(
     cfg: QkvTkgConfig,
     i_block_idx: int,
     sbm: SbufManager,
+    alloc_weights: bool = True,
 ) -> Tuple[nl.ndarray, int, list]:
     """
     Allocate all buffers needed for QKV projection: weights, and PSUMs.
@@ -1394,6 +1400,9 @@ def _allocate_qkv_buffers(
     for i in range(len(qkv_out_shape)):
         extra_space_needed *= qkv_out_shape[i]
 
+    if not alloc_weights:
+        return None, 1, _allocate_qkv_psums(I, i_block_idx, sbm)
+
     remaining_space = sbm.get_free_space() - extra_space_needed
     size_of_qkv_w_block = I * NUM_TILES_PER_H_BLOCK * sizeinbytes(weight_dtype)
     num_available_w_blocks = remaining_space // size_of_qkv_w_block
@@ -1416,8 +1425,11 @@ def _allocate_qkv_buffers(
         buffer=nl.sbuf,
     )
     qkv_w_sb = TensorView(qkv_w_sb)
+    return qkv_w_sb, num_w_blocks, _allocate_qkv_psums(I, i_block_idx, sbm)
 
-    # Allocate PSUM tiles - one per I tile in this I-block
+
+def _allocate_qkv_psums(I: int, i_block_idx: int, sbm: SbufManager) -> list:
+    """Allocate one PSUM tile per I tile in this I-block."""
     n_psum = div_ceil(I, I_TILE_SIZE)
     result_psum = []
     prefix = sbm.get_name_prefix()
@@ -1436,7 +1448,7 @@ def _allocate_qkv_buffers(
         )
         result_psum.append(psum_tensor)
 
-    return qkv_w_sb, num_w_blocks, result_psum
+    return result_psum
 
 
 def _process_h_block(
@@ -1479,13 +1491,16 @@ def _process_h_block(
         num_w_blocks: Number of weight tiles allocated in SBUF
     """
 
-    I = qkv_w_sb.shape[3]  # I-block size from tensor shape
+    I = qkv_w_hbm.shape[2]  # I-block size from tensor shape
 
-    # Select the weight tile slot for this H_block (circular buffer), slice to actual num_128_tiles
-    w_block_slot = H_block_idx % num_w_blocks
-    qkv_w_sb_block = qkv_w_sb.select(dim=1, index=w_block_slot).slice(dim=1, start=0, end=num_128_tiles)
+    if qkv_w_hbm.base_tensor.buffer == nl.sbuf:
+        qkv_w_sb_block = qkv_w_hbm
+    else:
+        # Select the weight tile slot for this H_block (circular buffer), slice to actual num_128_tiles
+        w_block_slot = H_block_idx % num_w_blocks
+        qkv_w_sb_block = qkv_w_sb.select(dim=1, index=w_block_slot).slice(dim=1, start=0, end=num_128_tiles)
 
-    nisa.dma_copy(qkv_w_sb_block.get_view(), qkv_w_hbm.get_view())
+        nisa.dma_copy(qkv_w_sb_block.get_view(), qkv_w_hbm.get_view())
 
     # Perform tiled matrix multiplication with array tiling
     for h1_tile in range(array_tiled_H1):

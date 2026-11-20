@@ -123,7 +123,8 @@ I_PER_EXPERT = 768 // TP_DEGREE  # 192
 
 SBM_SIZE_BYTES = 200 * 1024
 
-# All-gather + local fp32 sum in place of the ring all-reduce.
+# All-gather + local fp32 sum in place of the ring all-reduce; next layer's
+# QKV weights prefetched to SBUF ahead of the MoE all-reduce.
 AGENT_VARIANT = _os.environ.get("MK_AGENT_VARIANT", "0") == "1"
 
 # ---------------------------------------------------------------------------
@@ -350,6 +351,14 @@ def _sb2sb_gather_sum_gather(sharded_sb, dtype, rg, prg_id, n_prgs, H0, H1, H1_s
     return output_sb
 
 
+def _prefetch_qkv_w(W_qkv, prg_id, name):
+    """Load this shard's QKV weights [H, I] -> SBUF (H0, H1_SHARD, I), qkv_tkg's H-sharded view."""
+    w_sb = nl.ndarray((H0, H1_SHARD, I_QKV), dtype=W_qkv.dtype, buffer=nl.sbuf, name=name)
+    src = TensorView(W_qkv).reshape_dim(dim=0, shape=(N_PRGS, H0, H1_SHARD)).select(dim=0, index=prg_id)
+    nisa.dma_copy(dst=w_sb, src=src.get_view(), dge_mode=nisa.dge_mode.hwdge)
+    return w_sb
+
+
 def _multilayer_body(
     X,             # [B, S_tkg, H]                    bf16  HBM
     Wqkv_list,     # tuple of L: [H, I_QKV] pre-fused  bf16  HBM
@@ -422,6 +431,8 @@ def _multilayer_body(
         dge_mode=nisa.dge_mode.hwdge,
     )
 
+    qkv_w_next = _prefetch_qkv_w(Wqkv_list[0], prg_id, "L0_qkv_w_pref") if AGENT_VARIANT else None
+
     for layer_idx in range(num_layers):
         # ===== Attention ==================================================
         sbm.set_name_prefix(f"L{layer_idx}_attn_")
@@ -485,6 +496,7 @@ def _multilayer_body(
             transposed_out=True,
             out_in_sb=True,
             sbm=sbm,
+            W_qkv_sb=qkv_w_next,
         )
         attn_kernel_out_sb = attn_result[0]
         K_post[layer_idx] = attn_result[1]
@@ -593,6 +605,10 @@ def _multilayer_body(
             output_in_sbuf=True,
             output_dtype=dtype,
         )
+        if AGENT_VARIANT and layer_idx + 1 < num_layers:
+            qkv_w_next = _prefetch_qkv_w(
+                Wqkv_list[layer_idx + 1], prg_id, f"L{layer_idx + 1}_qkv_w_pref"
+            )
         # Transpose [H0, BxS, H1_SHARD] → [H0, H1_SHARD*BxS] for _sb2sb_all_reduce_gather.
         # Per-column copy avoids illegal-partition-step asserts on a strided view.
         moe_sharded_sb = nl.ndarray((H0, H1_SHARD * BxS), dtype=dtype,

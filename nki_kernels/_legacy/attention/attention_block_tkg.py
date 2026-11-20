@@ -59,6 +59,7 @@ from nkilib.core.attention.attention_tkg_utils import is_fp8_e4m3
 from nkilib.core.embeddings.rope import RoPE_sbuf
 from .output_projection_tkg import output_projection_tkg
 from nkilib.core.qkv.qkv import qkv
+from .qkv_tkg import qkv_tkg
 from nkilib.core.utils.allocator import SbufManager, create_auto_alloc_manager
 from nkilib.core.utils.common_types import NormType, QKVOutputLayout, QuantizationType
 from nkilib.core.utils.kernel_assert import kernel_assert
@@ -136,6 +137,7 @@ def attention_block_tkg(
     skip_attention: bool = False,
     KVDP: int = 1,
     KVDP_replica_group: Optional[ReplicaGroup] = None,
+    W_qkv_sb: Optional[nl.ndarray] = None,
 ):
     """
     Fused Attention Block for Token Generation (TKG).
@@ -363,25 +365,47 @@ def attention_block_tkg(
     # qkv() routes to qkv_tkg (SBUF output) or qkv_cte (HBM output) based on B*S_tkg
     rmsnorm_X_eps = 1e-3 if rmsnorm_X_eps == None else rmsnorm_X_eps
     output_in_sbuf = n_bxs_tiles == 1
-    QKV_out = qkv(
-        input=X,
-        fused_qkv_weights=W_qkv,
-        output_layout=QKVOutputLayout.BSD,
-        bias=bias_qkv,
-        fused_norm_type=NormType.RMS_NORM if rmsnorm_X_enabled else NormType.NO_NORM,
-        gamma_norm_weights=rmsnorm_X_gamma,
-        norm_eps=rmsnorm_X_eps,
-        hidden_actual=X_hidden_dim_actual,
-        quantization_type=quantization_type_qkv,
-        qkv_w_scale=weight_dequant_scale_qkv,
-        qkv_in_scale=input_dequant_scale_qkv,
-        d_head=d_head,
-        num_q_heads=q_heads,
-        num_kv_heads=kv_heads,
-        store_output_in_sbuf=output_in_sbuf,
-        sbm=sbm,
-        use_auto_allocation=True,
-    )
+    if W_qkv_sb != None:
+        # Prefetched per-shard QKV weights in SBUF: (H0, H1_shard, I).
+        QKV_out = qkv_tkg(
+            hidden=X,
+            qkv_w=W_qkv,
+            qkv_bias=bias_qkv,
+            norm_type=NormType.RMS_NORM if rmsnorm_X_enabled else NormType.NO_NORM,
+            norm_w=rmsnorm_X_gamma,
+            quantization_type=quantization_type_qkv,
+            qkv_w_scale=weight_dequant_scale_qkv,
+            qkv_in_scale=input_dequant_scale_qkv,
+            eps=rmsnorm_X_eps,
+            hidden_actual=X_hidden_dim_actual,
+            output_layout=QKVOutputLayout.BSD,
+            output_in_sbuf=output_in_sbuf,
+            d_head=d_head,
+            num_kv_heads=kv_heads,
+            num_q_heads=q_heads,
+            sbm=sbm,
+            qkv_w_sb=W_qkv_sb,
+        )
+    else:
+        QKV_out = qkv(
+            input=X,
+            fused_qkv_weights=W_qkv,
+            output_layout=QKVOutputLayout.BSD,
+            bias=bias_qkv,
+            fused_norm_type=NormType.RMS_NORM if rmsnorm_X_enabled else NormType.NO_NORM,
+            gamma_norm_weights=rmsnorm_X_gamma,
+            norm_eps=rmsnorm_X_eps,
+            hidden_actual=X_hidden_dim_actual,
+            quantization_type=quantization_type_qkv,
+            qkv_w_scale=weight_dequant_scale_qkv,
+            qkv_in_scale=input_dequant_scale_qkv,
+            d_head=d_head,
+            num_q_heads=q_heads,
+            num_kv_heads=kv_heads,
+            store_output_in_sbuf=output_in_sbuf,
+            sbm=sbm,
+            use_auto_allocation=True,
+        )
     QKV_out = QKV_out.reshape((B * S_tkg, I))
 
     # ========== Q/K Processing + V extraction: Transpose + RMSNorm pre + RoPE + RMSNorm post, K/V quantization ==========

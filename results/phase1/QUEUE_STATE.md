@@ -1,6 +1,6 @@
 # Q1+Q2 queue state (source of truth; queue: `docs/queues/Q1Q2.md`, read-only)
 
-Updated: 2026-11-19 00:20 ET. **Q1, Q2 and the early-finish items (H2.6, H2.2) done** (deadlines Thu Nov 19 12:00 / Sun Nov 22 12:00). Summary: `SUMMARY_Q1Q2.md`. Device idle, no jobs running; session stopped awaiting Q3 (kernel-edit approval pending).
+Updated: 2026-11-19 22:45 ET. **Q1, Q2 and the early-finish items (H2.6, H2.2) done** (deadlines Thu Nov 19 12:00 / Sun Nov 22 12:00). Summary: `SUMMARY_Q1Q2.md`. Device idle, no jobs running; session stopped awaiting Q3 (kernel-edit approval pending).
 
 ## Environment
 - Worktree `~/nki-moe-megakernel/.claude/worktrees/q1q2` (branch `worktree-q1q2`); before every push `git pull --no-rebase mine phase0/trn2-setup`, then `git push mine HEAD:phase0/trn2-setup` (rule changed Nov 18; merges fine).
@@ -34,7 +34,7 @@ XLA `traced_xla_trn2_229_s768_greedy` (production), `…_vcap` (validator captur
 
 # Q3 queue state (queue: `docs/queues/Q3.md`, read-only; Nov 19–27)
 
-Updated: 2026-11-19 12:55 ET. Checkpoint `SUMMARY_Q3_mid.md` due Sun Nov 22 12:00 ET; Q3 done Fri Nov 27 12:00 ET.
+Updated: 2026-11-19 22:45 ET. Checkpoint `SUMMARY_Q3_mid.md` due Sun Nov 22 12:00 ET; Q3 done Fri Nov 27 12:00 ET.
 
 ## Environment
 - Results worktree `.claude/worktrees/q3` (branch `worktree-q3`; `git pull --no-rebase mine phase0/trn2-setup`, then `git push mine HEAD:phase0/trn2-setup`). Kernel work: worktrees on `q3/<task>` branches, pushed to `mine`, never merged here.
@@ -48,9 +48,9 @@ Updated: 2026-11-19 12:55 ET. Checkpoint `SUMMARY_Q3_mid.md` due Sun Nov 22 12:0
 | T2.1 fp32 router emulation | done Nov 19 10:58: fp32 router already in B/C/XLA; vs bf16 logits KL −21.6%, tie-tolerant flips +1.36 pp | `tools/router_emul.py`, `results/phase1/router_emul.json` |
 | T2.2 fp32 router kernel | **skipped by rule** (flips do not fall ≥ 2 pp; the change would be a no-op) | FINDINGS T2.1 |
 | T3.1 E vs C attribution | done Nov 19 11:10: per-call mask/RoPE build (software-DGE stall) ≈ 20 of E's +38.6 µs/layer | `tools/phase_attrib.py`, `results/phase1/t3/` |
-| T3.2 E-copy changes | Eh (hoisted mask/RoPE) passes v1.1, bit-identical to E, profile recovers 32.0 of 38.6 µs/layer; bench B/C/E/Eh n=5 running since 12:42 ET | branch `q3/t3-fusion` (`wt/t3`), build `traced_Eh_trn2_229_s768` |
-| T4 agent study A1/C1(/A2/C2) | harness + prompt ready; starts after the T3 bench | `tools/agent_eval.sh`, `results/phase1/t4/prompt_template.md` |
-| Mid summary | due Nov 22 12:00 | |
+| T3.2 E-copy changes | done Nov 19 20:20: Eh 10.707 vs E 12.255 / C 10.373 / B 10.579 ms (n=5) — 82% of E − C recovered; not within 2σ of C | branch `q3/t3-fusion` (`wt/t3`), `bench_q3_t3.json` |
+| T4 agent study A1/C1(/A2/C2) | harness sanity PASS 10.311 ms (Nov 19 22:40); **A1 running** 03:42–09:42 UTC Nov 20 (`wt/a1`, branch `q3/t4-a1`); then C1 | `tools/agent_eval.sh`, `results/phase1/t4/`, `~/runs/agents/<run>/` |
+| Mid summary | written Nov 19 (T1–T3 complete) | `SUMMARY_Q3_mid.md` |
 | Wrap-up | due Nov 27 12:00 | |
 
 ## Disk and loading (Kevin, Nov 19 13:20 ET)

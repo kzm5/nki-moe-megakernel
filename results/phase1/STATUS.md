@@ -6,3 +6,4 @@
 - 2026-11-18 23:35 ET — Q2 done (T6–T11, T8b); report `results/phase1/SUMMARY_Q1Q2.md` written; device idle. Commit: see `git log` (pushed after this line).
 
 - 2026-11-19 12:55 ET — Q3: T1 done; T2 done (fp32 router already in B/C/XLA; T2.2 skipped by rule); T3.1 done; T3.2 Eh passes v1.1 and recovers 32 of E's 38.6 µs/layer in the profile; bench running.
+- 2026-11-19 22:45 ET — Q3 T3 done (Eh recovers 82% of E − C; 10.707 vs C 10.373 ms); mid summary written; T4 A1 agent run started (6 h).

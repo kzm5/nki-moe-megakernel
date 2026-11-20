@@ -322,23 +322,27 @@ def _sb2sb_all_reduce_residual_add(residual_sb, sharded_sb, bs_major, dtype, rg,
     """
     ar_sb = nl.ndarray(sharded_sb.shape, dtype=dtype, buffer=nl.sbuf)
     nccl.all_reduce(dsts=[ar_sb], srcs=[sharded_sb], op=nl.add, replica_group=rg)
-
-    def view(t):
-        if bs_major:
-            return t.reshape((H0, BxS, H2))
-        return t.ap(pattern=[[BxS * H2, H0], [1, BxS], [BxS, H2]], offset=0)
-
-    res3 = residual_sb.reshape((H0, BxS, H1))
     if n_prgs > 1:
         other_lnc = 1 - prg_id
         recv_sb = nl.ndarray(sharded_sb.shape, dtype=dtype, buffer=nl.sbuf)
         nisa.sendrecv(src=ar_sb, dst=recv_sb, send_to_rank=other_lnc,
                       recv_from_rank=other_lnc, pipe_id=0)
+
+    # View shards as (H0, bs, h2) to match residual's per-shard layout.
+    if bs_major:
+        ar_v = ar_sb.reshape((H0, BxS, H2))
+    else:
+        ar_v = ar_sb.ap(pattern=[[BxS * H2, H0], [1, BxS], [BxS, H2]], offset=0)
+    res3 = residual_sb.reshape((H0, BxS, H1))
     own = res3[:, :, nl.ds(prg_id * H2, H2)]
-    nisa.tensor_tensor(dst=own, data1=own, data2=view(ar_sb), op=nl.add)
+    nisa.tensor_tensor(dst=own, data1=own, data2=ar_v, op=nl.add)
     if n_prgs > 1:
+        if bs_major:
+            recv_v = recv_sb.reshape((H0, BxS, H2))
+        else:
+            recv_v = recv_sb.ap(pattern=[[BxS * H2, H0], [1, BxS], [BxS, H2]], offset=0)
         oth = res3[:, :, nl.ds(other_lnc * H2, H2)]
-        nisa.tensor_tensor(dst=oth, data1=oth, data2=view(recv_sb), op=nl.add)
+        nisa.tensor_tensor(dst=oth, data1=oth, data2=recv_v, op=nl.add)
 
 
 def _multilayer_body(

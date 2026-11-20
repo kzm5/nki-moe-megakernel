@@ -87,6 +87,7 @@ from nkilib.core.utils.common_types import (
     RouterActFnType,
 )
 from nkilib.core.utils.kernel_helpers import get_verified_program_sharding_info
+from nkilib.core.utils.tensor_view import TensorView
 from nkilib.experimental.transformer.transformer_tkg import _sb2sb_all_reduce_gather
 
 
@@ -121,6 +122,9 @@ TP_DEGREE    = 4                # must match NxDI's tp_degree
 I_PER_EXPERT = 768 // TP_DEGREE  # 192
 
 SBM_SIZE_BYTES = 200 * 1024
+
+# All-gather + local fp32 sum in place of the ring all-reduce.
+AGENT_VARIANT = _os.environ.get("MK_AGENT_VARIANT", "0") == "1"
 
 # ---------------------------------------------------------------------------
 # Full-attention mask builder (no SWA — every Qwen3 layer is full attention)
@@ -310,6 +314,42 @@ def _store_shard_interleaved_sb_to_hbm(dst_hbm, src_sb, B, S_tkg, prg_id):
         )
 
 
+def _sb2sb_gather_sum_gather(sharded_sb, dtype, rg, prg_id, n_prgs, H0, H1, H1_shard, BxS):
+    """All-reduce as SB2SB all-gather over TP ranks + local sum, then LNC gather.
+
+    Returns:
+        output_sb [H0, BxS * H1], same layout as ``_sb2sb_all_reduce_gather``.
+    """
+    F = H1_shard * BxS
+    allg_sb = nl.ndarray((H0, TP_DEGREE * F), dtype=dtype, buffer=nl.sbuf)
+    nccl.all_gather(dsts=[allg_sb], srcs=[sharded_sb], replica_group=rg, collective_dim=1)
+
+    # Fixed rank order -> bit-identical sum on every rank.
+    acc01 = nl.ndarray((H0, F), dtype=nl.float32, buffer=nl.sbuf)
+    acc23 = nl.ndarray((H0, F), dtype=nl.float32, buffer=nl.sbuf)
+    nisa.tensor_tensor(dst=acc01, data1=allg_sb[:, 0:F], data2=allg_sb[:, F:2 * F], op=nl.add)
+    nisa.tensor_tensor(dst=acc23, data1=allg_sb[:, 2 * F:3 * F], data2=allg_sb[:, 3 * F:4 * F], op=nl.add)
+    sharded_AR_sb = nl.ndarray((H0, F), dtype=dtype, buffer=nl.sbuf)
+    nisa.tensor_tensor(dst=sharded_AR_sb, data1=acc01, data2=acc23, op=nl.add)
+
+    gathered_sb = nl.ndarray((H0, H1 * BxS), dtype=dtype, buffer=nl.sbuf)
+    nisa.tensor_copy(dst=gathered_sb[:, nl.ds(prg_id * F, F)], src=sharded_AR_sb)
+    if n_prgs > 1:
+        other_lnc = 1 - prg_id
+        nisa.sendrecv(
+            src=sharded_AR_sb,
+            dst=gathered_sb[:, nl.ds(other_lnc * F, F)],
+            send_to_rank=other_lnc,
+            recv_from_rank=other_lnc,
+            pipe_id=0,
+        )
+
+    output_sb = nl.ndarray((H0, BxS * H1), dtype=dtype, buffer=nl.sbuf)
+    src_view = TensorView(gathered_sb).rearrange(('h0', ('h1', 'bs')), ('h0', 'bs', 'h1'), {'h1': H1})
+    nisa.tensor_copy(dst=output_sb.reshape((H0, BxS, H1)), src=src_view.get_view())
+    return output_sb
+
+
 def _multilayer_body(
     X,             # [B, S_tkg, H]                    bf16  HBM
     Wqkv_list,     # tuple of L: [H, I_QKV] pre-fused  bf16  HBM
@@ -454,9 +494,14 @@ def _multilayer_body(
         # outer H1_SHARD / inner BxS — the layout _sb2sb_all_reduce_gather wants.
         attn_sharded_sb = attn_kernel_out_sb.reshape((H0, H1_SHARD * BxS))
 
-        attn_gathered_sb, _ = _sb2sb_all_reduce_gather(
-            attn_sharded_sb, dtype, rg, prg_id, n_prgs, H0, H1, H1_SHARD, BxS
-        )
+        if AGENT_VARIANT:
+            attn_gathered_sb = _sb2sb_gather_sum_gather(
+                attn_sharded_sb, dtype, rg, prg_id, n_prgs, H0, H1, H1_SHARD, BxS
+            )
+        else:
+            attn_gathered_sb, _ = _sb2sb_all_reduce_gather(
+                attn_sharded_sb, dtype, rg, prg_id, n_prgs, H0, H1, H1_SHARD, BxS
+            )
 
         # Free attention's stack/heap before MoE.
         while sbm.heap:
@@ -559,9 +604,14 @@ def _multilayer_body(
                 src=moe_out_sb[:, :, h1s],
             )
 
-        moe_gathered_sb, _ = _sb2sb_all_reduce_gather(
-            moe_sharded_sb, dtype, rg, prg_id, n_prgs, H0, H1, H1_SHARD, BxS
-        )
+        if AGENT_VARIANT:
+            moe_gathered_sb = _sb2sb_gather_sum_gather(
+                moe_sharded_sb, dtype, rg, prg_id, n_prgs, H0, H1, H1_SHARD, BxS
+            )
+        else:
+            moe_gathered_sb, _ = _sb2sb_all_reduce_gather(
+                moe_sharded_sb, dtype, rg, prg_id, n_prgs, H0, H1, H1_SHARD, BxS
+            )
 
         while sbm.heap:
             sbm.pop_heap()

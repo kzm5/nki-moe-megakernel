@@ -26,9 +26,10 @@ for r in $(seq 1 $rounds); do for c in "$@"; do
   [ -f $cdir/model.pt ] || { log "skip $name (no build)"; continue; }
   # cold page cache makes the IOPS-capped root volume page-fault weights at ~12 MB/s
   for f in $Q/hf_model/model-*.safetensors; do dd if=$f of=/dev/null bs=16M 2>/dev/null; done
-  df -h / | tail -1 >> $L; log "start $name"
+  presh=""; [ -d $cdir/weights ] && presh="--save-sharded-checkpoint --skip-sharding"
+  df -h / | tail -1 >> $L; log "start $name $presh"
   # shellcheck disable=SC2086
-  env MK_DIR=$mk $env bash ~/runs/run_job.sh $name $cdir $flags --seq-len $S "${COMMON[@]}" --skip-compile > /dev/null 2>&1
+  env MK_DIR=$mk $env bash ~/runs/run_job.sh $name $cdir $flags $presh --seq-len $S "${COMMON[@]}" --skip-compile > /dev/null 2>&1
   bash ~/runs/ledger_bench.sh $name $S $c "Q3 $tag interleaved $*" >> $L 2>&1
   log "end $name $(grep -o 'EXIT_STATUS=[0-9]*' ~/runs/$name.log | tail -1)"
 done; done

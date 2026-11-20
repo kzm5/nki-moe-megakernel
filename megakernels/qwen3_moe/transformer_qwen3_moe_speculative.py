@@ -329,8 +329,13 @@ def _sb2sb_all_reduce_residual_add(residual_sb, sharded_sb, bs_major, dtype, rg,
     if n_prgs > 1:
         other_lnc = 1 - prg_id
         recv_sb = nl.ndarray(sharded_sb.shape, dtype=dtype, buffer=nl.sbuf)
+        # GpSimd SB2SB swap: low latency, needs P%16==0 and <=512 B/partition (16-bit).
+        if BxS * H2 * 2 <= 512:
+            sr_engine = nisa.dma_engine.gpsimd_dma
+        else:
+            sr_engine = nisa.dma_engine.dma
         nisa.sendrecv(src=ar_sb, dst=recv_sb, send_to_rank=other_lnc,
-                      recv_from_rank=other_lnc, pipe_id=0)
+                      recv_from_rank=other_lnc, pipe_id=0, dma_engine=sr_engine)
 
     # View shards as (H0, bs, h2) to match residual's per-shard layout.
     if bs_major:

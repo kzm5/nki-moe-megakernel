@@ -312,37 +312,43 @@ def _store_shard_interleaved_sb_to_hbm(dst_hbm, src_sb, B, S_tkg, prg_id):
         )
 
 
-def _sb2sb_all_gather_reduce(sharded_sb, dtype, rg, prg_id, n_prgs, BxS):
-    """All-reduce as SB2SB all-gather + local sum, then LNC gather.
+def _sum_partials(dst, src, W):
+    """dst = sum of the TP_DEGREE [H0, W] column blocks of src, accumulated in fp32."""
+    acc_sb = nl.ndarray((H0, W), dtype=nl.float32, buffer=nl.sbuf)
+    nisa.tensor_tensor(dst=acc_sb, data1=src[:, 0:W], data2=src[:, W:2 * W], op=nl.add)
+    for r in range(2, TP_DEGREE - 1):
+        nisa.tensor_tensor(dst=acc_sb, data1=acc_sb, data2=src[:, r * W:(r + 1) * W], op=nl.add)
+    nisa.tensor_tensor(dst=dst, data1=acc_sb,
+                       data2=src[:, (TP_DEGREE - 1) * W:TP_DEGREE * W], op=nl.add)
+
+
+def _sb2sb_all_gather_reduce(ag_src_sb, dtype, rg, prg_id, n_prgs, BxS):
+    """All-reduce as SB2SB all-gather + local sum, with the LNC exchange on the raw partials.
 
     Computes:
-        out[:, h1*BxS + bs] = sum_r sharded_sb_r[:, (h1 - shard)*BxS + bs], laid out [H0, BxS*H1].
+        out[:, shard*H1_SHARD*BxS + j] = sum_r ag_src_sb_r[:, j] for both LNC shards, laid out [H0, BxS*H1].
     Note:
+        ``ag_src_sb`` must not be rewritten until the next same-stage call (peers may still read it).
         Partials are summed in fp32 with one rounding to ``dtype``.
     """
     W = H1_SHARD * BxS
     ag_sb = nl.ndarray((H0, TP_DEGREE * W), dtype=dtype, buffer=nl.sbuf)
-    nccl.all_gather(dsts=[ag_sb], srcs=[sharded_sb], replica_group=rg, collective_dim=1)
-
-    acc_sb = nl.ndarray((H0, W), dtype=nl.float32, buffer=nl.sbuf)
-    nisa.tensor_tensor(dst=acc_sb, data1=ag_sb[:, 0:W], data2=ag_sb[:, W:2 * W], op=nl.add)
-    for r in range(2, TP_DEGREE - 1):
-        nisa.tensor_tensor(dst=acc_sb, data1=acc_sb, data2=ag_sb[:, r * W:(r + 1) * W], op=nl.add)
-    red_sb = nl.ndarray((H0, W), dtype=dtype, buffer=nl.sbuf)
-    nisa.tensor_tensor(dst=red_sb, data1=acc_sb,
-                       data2=ag_sb[:, (TP_DEGREE - 1) * W:TP_DEGREE * W], op=nl.add)
+    nccl.all_gather(dsts=[ag_sb], srcs=[ag_src_sb], replica_group=rg, collective_dim=1)
 
     gathered_sb = nl.ndarray((H0, H1 * BxS), dtype=dtype, buffer=nl.sbuf)
-    nisa.tensor_copy(dst=gathered_sb[:, nl.ds(prg_id * W, W)], src=red_sb)
     if n_prgs > 1:
         other = 1 - prg_id
+        peer_sb = nl.ndarray((H0, TP_DEGREE * W), dtype=dtype, buffer=nl.sbuf)
         nisa.sendrecv(
-            src=red_sb,
-            dst=gathered_sb[:, nl.ds(other * W, W)],
+            src=ag_sb,
+            dst=peer_sb,
             send_to_rank=other,
             recv_from_rank=other,
             pipe_id=0,
         )
+    _sum_partials(gathered_sb[:, nl.ds(prg_id * W, W)], ag_sb, W)
+    if n_prgs > 1:
+        _sum_partials(gathered_sb[:, nl.ds(other * W, W)], peer_sb, W)
     if BxS == 1:
         return gathered_sb
 
@@ -424,6 +430,12 @@ def _multilayer_body(
         dge_mode=nisa.dge_mode.hwdge,
     )
 
+    if _AG_REDUCE:
+        ag_src_attn_sb = nl.ndarray((H0, H1_SHARD * BxS), dtype=dtype, buffer=nl.sbuf,
+                                    name="ag_src_attn_sb")
+        ag_src_moe_sb = nl.ndarray((H0, H1_SHARD * BxS), dtype=dtype, buffer=nl.sbuf,
+                                   name="ag_src_moe_sb")
+
     for layer_idx in range(num_layers):
         # ===== Attention ==================================================
         sbm.set_name_prefix(f"L{layer_idx}_attn_")
@@ -497,8 +509,9 @@ def _multilayer_body(
         attn_sharded_sb = attn_kernel_out_sb.reshape((H0, H1_SHARD * BxS))
 
         if _AG_REDUCE:
+            nisa.tensor_copy(dst=ag_src_attn_sb, src=attn_sharded_sb)
             attn_gathered_sb = _sb2sb_all_gather_reduce(
-                attn_sharded_sb, dtype, rg, prg_id, n_prgs, BxS)
+                ag_src_attn_sb, dtype, rg, prg_id, n_prgs, BxS)
         else:
             attn_gathered_sb, _ = _sb2sb_all_reduce_gather(
                 attn_sharded_sb, dtype, rg, prg_id, n_prgs, H0, H1, H1_SHARD, BxS
@@ -596,9 +609,12 @@ def _multilayer_body(
         )
         # Transpose [H0, BxS, H1_SHARD] → [H0, H1_SHARD*BxS] for _sb2sb_all_reduce_gather.
         # Per-column copy avoids illegal-partition-step asserts on a strided view.
-        moe_sharded_sb = nl.ndarray((H0, H1_SHARD * BxS), dtype=dtype,
-                                     buffer=nl.sbuf,
-                                     name=f"L{layer_idx}_moe_sharded_sb")
+        if _AG_REDUCE:
+            moe_sharded_sb = ag_src_moe_sb
+        else:
+            moe_sharded_sb = nl.ndarray((H0, H1_SHARD * BxS), dtype=dtype,
+                                         buffer=nl.sbuf,
+                                         name=f"L{layer_idx}_moe_sharded_sb")
         for h1s in range(H1_SHARD):
             nisa.tensor_copy(
                 dst=moe_sharded_sb[:, h1s * BxS : (h1s + 1) * BxS],

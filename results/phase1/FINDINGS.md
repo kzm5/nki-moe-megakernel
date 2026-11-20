@@ -2,6 +2,20 @@
 
 Queue: [`docs/queues/Q1Q2.md`](../../docs/queues/Q1Q2.md). State: [`QUEUE_STATE.md`](QUEUE_STATE.md). Ledger: `~/runs/ledger.jsonl` → [`ledger.jsonl`](ledger.jsonl). Times ET unless marked UTC. Q3 (Nov 19–27, [`docs/queues/Q3.md`](../../docs/queues/Q3.md)): newest Q3 entries directly below.
 
+## 2026-11-20 04:42 → 05:20 ET — pre-sharded-load hook checked: bit-identical, load 149 s vs 806 s (Measured)
+
+Kevin approved (Nov 20) `vm.swappiness=10` (set by him, runtime) and `MK_LOAD_PRESHARDED=1` in `main.py` (`a59ace1`, default off). `tools/check_preshard_hook.sh`: frozen validator v1.1 on C's pre-sharded build, `MK_DIR=q3`, page cache pre-warmed, run after A1's deadline.
+
+| Run | LOADED | Sharding on load | Job wall | Validator v1.1 |
+|---|---|---|---|---|
+| `MK_LOAD_PRESHARDED=1` (log: "Loading presharded checkpoints") | **149 s** | – | 10.1 min | PASS |
+| sharding on load, swappiness 10 | 806 s | 537 s | 23.1 min | PASS |
+| earlier: T4 base/1, swappiness 60 (fresh build) | 2,049 s | 1,407 s | | PASS |
+| earlier: Eh, cold page cache | 2,537 s | | | PASS |
+
+- **Measured: device outputs bit-identical with and without the hook — teacher-forced scores 64/64, perplexity passages 16/16.** The hook is cleared for scored runs. It is now in C1's worktree (cherry-pick `689a988` on `q3/t4-c1`) and set by `agent_eval.sh` for validator runs; it only acts on builds with `weights/` (C's), so fresh agent builds still shard on load. A1 ran without it (not restarted).
+- Measured: swappiness 10 alone cut sharding on load from 1,407 s to 537 s.
+
 ## 2026-11-19 22:42 → 2026-11-20 04:39 ET — Q3 T4 run A1 (setup A: compile errors + validator PASS/FAIL + TKG p50) (Measured)
 
 Fresh general-purpose subagent with the nki-kernel-optimizer skill, prompt `results/phase1/t4/prompt_template.md` (setup A), worktree `wt/a1` from `7fd70dc`, budget 6 h (03:42–09:42 UTC). Orchestrator gave no hints beyond the setup. Harness records: `results/phase1/t4/a1_{1,2,3}/`; diff vs start `results/phase1/t4/a1.diff`; branch `q3/t4-a1` pushed.

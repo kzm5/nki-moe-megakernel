@@ -24,7 +24,7 @@ for f in $Q/hf_model/model-*.safetensors; do dd if=$f of=/dev/null bs=16M 2>/dev
 git -C "$wt" rev-parse --short HEAD > $d/commit 2>/dev/null
 FLAGS=(--enable-nki --seq-len 768 --on-device-sampling --top-k 1 --do-sample '' --output-logits)
 # compile + frozen validator v1.1 in one process (the validator compiles when model.pt is missing)
-MK_DIR=$wt MK_AGENT_VARIANT=1 ~/runs/run_py.sh ${name}_val $VAL run nki $cdir ~/runs/p1/val/agent_${run}_$it > /dev/null 2>&1
+MK_DIR=$wt MK_AGENT_VARIANT=1 MK_LOAD_PRESHARDED=1 ~/runs/run_py.sh ${name}_val $VAL run nki $cdir ~/runs/p1/val/agent_${run}_$it > /dev/null 2>&1
 echo "$(ts) validated" >> $d/times
 if [ ! -f $cdir/model.pt ]; then
   say "COMPILE: FAIL"

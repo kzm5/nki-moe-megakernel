@@ -62,6 +62,8 @@ _os.environ["NKI_MOE_LEGACY_DOWN_WEIGHT_LOAD"] = "1"
 _os.environ["NKI_MOE_LEGACY_GATE_UP_WEIGHT_LOAD"] = "1"
 _os.environ["NKI_MOE_FORCE_SHARD_ON_H"] = "1"
 # _os.environ["NKI_MOE_INDIRECT_DMA_FUSION"] = "1"
+# All-gather + local fp32 sum in place of the per-layer SB2SB all-reduce.
+_AG_REDUCE = _os.environ.get("MK_AGENT_VARIANT") == "1"
 
 import linecache
 
@@ -310,6 +312,46 @@ def _store_shard_interleaved_sb_to_hbm(dst_hbm, src_sb, B, S_tkg, prg_id):
         )
 
 
+def _sb2sb_all_gather_reduce(sharded_sb, dtype, rg, prg_id, n_prgs, BxS):
+    """All-reduce as SB2SB all-gather + local sum, then LNC gather.
+
+    Computes:
+        out[:, h1*BxS + bs] = sum_r sharded_sb_r[:, (h1 - shard)*BxS + bs], laid out [H0, BxS*H1].
+    Note:
+        Partials are summed in fp32 with one rounding to ``dtype``.
+    """
+    W = H1_SHARD * BxS
+    ag_sb = nl.ndarray((H0, TP_DEGREE * W), dtype=dtype, buffer=nl.sbuf)
+    nccl.all_gather(dsts=[ag_sb], srcs=[sharded_sb], replica_group=rg, collective_dim=1)
+
+    acc_sb = nl.ndarray((H0, W), dtype=nl.float32, buffer=nl.sbuf)
+    nisa.tensor_tensor(dst=acc_sb, data1=ag_sb[:, 0:W], data2=ag_sb[:, W:2 * W], op=nl.add)
+    for r in range(2, TP_DEGREE - 1):
+        nisa.tensor_tensor(dst=acc_sb, data1=acc_sb, data2=ag_sb[:, r * W:(r + 1) * W], op=nl.add)
+    red_sb = nl.ndarray((H0, W), dtype=dtype, buffer=nl.sbuf)
+    nisa.tensor_tensor(dst=red_sb, data1=acc_sb,
+                       data2=ag_sb[:, (TP_DEGREE - 1) * W:TP_DEGREE * W], op=nl.add)
+
+    gathered_sb = nl.ndarray((H0, H1 * BxS), dtype=dtype, buffer=nl.sbuf)
+    nisa.tensor_copy(dst=gathered_sb[:, nl.ds(prg_id * W, W)], src=red_sb)
+    if n_prgs > 1:
+        other = 1 - prg_id
+        nisa.sendrecv(
+            src=red_sb,
+            dst=gathered_sb[:, nl.ds(other * W, W)],
+            send_to_rank=other,
+            recv_from_rank=other,
+            pipe_id=0,
+        )
+    if BxS == 1:
+        return gathered_sb
+
+    out_sb = nl.ndarray((H0, BxS, H1), dtype=dtype, buffer=nl.sbuf)
+    for h1 in range(H1):
+        nisa.tensor_copy(dst=out_sb[:, :, h1], src=gathered_sb[:, h1 * BxS:(h1 + 1) * BxS])
+    return out_sb.reshape((H0, BxS * H1))
+
+
 def _multilayer_body(
     X,             # [B, S_tkg, H]                    bf16  HBM
     Wqkv_list,     # tuple of L: [H, I_QKV] pre-fused  bf16  HBM
@@ -454,9 +496,13 @@ def _multilayer_body(
         # outer H1_SHARD / inner BxS — the layout _sb2sb_all_reduce_gather wants.
         attn_sharded_sb = attn_kernel_out_sb.reshape((H0, H1_SHARD * BxS))
 
-        attn_gathered_sb, _ = _sb2sb_all_reduce_gather(
-            attn_sharded_sb, dtype, rg, prg_id, n_prgs, H0, H1, H1_SHARD, BxS
-        )
+        if _AG_REDUCE:
+            attn_gathered_sb = _sb2sb_all_gather_reduce(
+                attn_sharded_sb, dtype, rg, prg_id, n_prgs, BxS)
+        else:
+            attn_gathered_sb, _ = _sb2sb_all_reduce_gather(
+                attn_sharded_sb, dtype, rg, prg_id, n_prgs, H0, H1, H1_SHARD, BxS
+            )
 
         # Free attention's stack/heap before MoE.
         while sbm.heap:
@@ -559,9 +605,13 @@ def _multilayer_body(
                 src=moe_out_sb[:, :, h1s],
             )
 
-        moe_gathered_sb, _ = _sb2sb_all_reduce_gather(
-            moe_sharded_sb, dtype, rg, prg_id, n_prgs, H0, H1, H1_SHARD, BxS
-        )
+        if _AG_REDUCE:
+            moe_gathered_sb = _sb2sb_all_gather_reduce(
+                moe_sharded_sb, dtype, rg, prg_id, n_prgs, BxS)
+        else:
+            moe_gathered_sb, _ = _sb2sb_all_reduce_gather(
+                moe_sharded_sb, dtype, rg, prg_id, n_prgs, H0, H1, H1_SHARD, BxS
+            )
 
         while sbm.heap:
             sbm.pop_heap()

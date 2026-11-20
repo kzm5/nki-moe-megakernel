@@ -18,8 +18,8 @@ on your branch before evaluating it.
 - Evaluate only through the harness, one evaluation at a time, and run no other device or compile jobs:
   `bash {HARNESS} {SETUP} {RUN} <iter> {WT}` (iter = 1, 2, …). It detaches; wait with
   `timeout 590 bash -c 'until [ -f ~/runs/agents/{RUN}/<iter>/DONE ]; do sleep 30; done'` (repeat until it exists),
-  then read `~/runs/agents/{RUN}/<iter>/feedback.txt`. One iteration takes ~1 h (compile 15–35 min, validator
-  15–25 min, 2 benchmark runs).
+  then read `~/runs/agents/{RUN}/<iter>/feedback.txt`. One iteration takes ~1.5–2 h (compile ~15 min plus validator
+  ~45 min in one job, then 2 benchmark runs ~35 min), so plan for about 3–4 iterations.
 - The validator, spec, corpus and golden tensors are read-only; do not try to modify or bypass them.
 - Budget: 6 h wall clock from {START} UTC. Start no evaluation that cannot finish by {DEADLINE} UTC; stop then.
 - Do not delete files outside your worktree.

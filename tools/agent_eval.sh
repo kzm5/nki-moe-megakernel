@@ -23,19 +23,16 @@ echo "$(ts) start" > $d/times
 for f in $Q/hf_model/model-*.safetensors; do dd if=$f of=/dev/null bs=16M 2>/dev/null; done
 git -C "$wt" rev-parse --short HEAD > $d/commit 2>/dev/null
 FLAGS=(--enable-nki --seq-len 768 --on-device-sampling --top-k 1 --do-sample '' --output-logits)
-# compile
-MK_DIR=$wt MK_AGENT_VARIANT=1 bash ~/runs/run_job.sh ${name}_compile $cdir "${FLAGS[@]}" --compile-only > /dev/null 2>&1
-echo "$(ts) compiled" >> $d/times
-if [ ! -f $cdir/model.pt ]; then
-  say "COMPILE: FAIL"
-  grep -E "Error|error:|ERROR|Traceback|assert|NCC_" ~/runs/${name}_compile.log | grep -v -i "warn" | tail -40 >> $fb
-  echo "--- last lines" >> $fb; tail -25 ~/runs/${name}_compile.log >> $fb
-  touch $d/DONE; exit 0
-fi
-say "COMPILE: OK ($(grep -o 'Compiling and tracing time: [0-9.]*' ~/runs/${name}_compile.log | tail -1))"
-# validator (frozen v1.1)
+# compile + frozen validator v1.1 in one process (the validator compiles when model.pt is missing)
 MK_DIR=$wt MK_AGENT_VARIANT=1 ~/runs/run_py.sh ${name}_val $VAL run nki $cdir ~/runs/p1/val/agent_${run}_$it > /dev/null 2>&1
 echo "$(ts) validated" >> $d/times
+if [ ! -f $cdir/model.pt ]; then
+  say "COMPILE: FAIL"
+  grep -E "Error|error:|ERROR|Traceback|assert|NCC_" ~/runs/${name}_val.log | grep -v -i "warn" | tail -40 >> $fb
+  echo "--- last lines" >> $fb; tail -25 ~/runs/${name}_val.log >> $fb
+  touch $d/DONE; exit 0
+fi
+say "COMPILE: OK ($(grep -o 'Compiling and tracing time: [0-9.]*' ~/runs/${name}_val.log | tail -1))"
 v=$(grep '^VALIDATE ' ~/runs/${name}_val.log | tail -1 | cut -c10-)
 if [ -z "$v" ]; then
   say "VALIDATOR: ERROR (build did not load or run)"

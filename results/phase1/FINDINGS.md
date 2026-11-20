@@ -2,7 +2,35 @@
 
 Queue: [`docs/queues/Q1Q2.md`](../../docs/queues/Q1Q2.md). State: [`QUEUE_STATE.md`](QUEUE_STATE.md). Ledger: `~/runs/ledger.jsonl` → [`ledger.jsonl`](ledger.jsonl). Times ET unless marked UTC. Q3 (Nov 19–27, [`docs/queues/Q3.md`](../../docs/queues/Q3.md)): newest Q3 entries directly below.
 
-## 2026-11-20 05:21 ET → — Q3 T4 run C1 (setup C), in progress (Measured)
+## 2026-11-20 05:21 → 10:38 ET — Q3 T4 run C1 (setup C), done (Measured)
+
+Harness records `results/phase1/t4/c1_{1,2,3}/`, diff `results/phase1/t4/c1.diff` (only `transformer_qwen3_moe_speculative.py`, +101/−18, gated by `MK_AGENT_VARIANT=1`), branch `q3/t4-c1` pushed. Verdicts and run-to-run checked from the validator reports, not the agent's account.
+
+| Iter | Commit | Change (agent's description) | Compile | Validator v1.1 | Run-to-run | KL ratio | TKG p50 (n=2) |
+|---|---|---|---|---|---|---|---|
+| 1 | `65486dc` | per-layer SB2SB all-reduce → all-gather + local fp32 sum of 4 partials | 942 s | PASS | **0/64 (non-deterministic)** | 0.943 | 10.034 |
+| 2 | `35309c3` | + LNC exchange of the raw gathered partials (sum overlaps the exchange); a dedicated all-gather source buffer per stage | 723 s | PASS | 64/64 | 0.960 | **10.023** |
+| 3 | `ede5298` | + fp32 sum added straight into the residual (one rounding); one MoE-output layout copy at BxS=1 | 726 s | **FAIL** (worst_pos: gross 2, max KL 0.959) | 64/64 | 1.000 | 9.900 |
+
+| Metric | A1 (setup A) | C1 (setup C) |
+|---|---|---|
+| Iterations / compiles / compile failures | 3 / 3 / 0 | 3 / 3 / 0 |
+| Validator v1.1 passes | 3 / 3 | 2 / 3 (iter 3 fails worst_pos) |
+| Non-deterministic passing builds | 0 | 1 (iter 1; reported separately, not eligible) |
+| Best eligible (pass + 64/64 run-to-run) | 10.101 ms (iter 3, `00b7b0b`) | **10.023 ms (iter 2, `35309c3`)** |
+| Fastest build overall | 10.101 ms | 9.900 ms (fails v1.1) |
+| First validated improvement | 06:02 UTC = 2 h 20 min after start (iter 1, eligible) | 12:02 UTC (iter 1, non-deterministic); first eligible 13:53 UTC = 3 h 32 min wall, 2 h 37 min active |
+| Device time (sum of harness windows) | 5 h 53 min | 4 h 59 min |
+| Wall / idle / active | 6 h 00 / 0 / 5 h 57 min (ended 09:39) | 5 h 17 min (10:21–15:38) / 55.0 min / 4 h 22 min (stopped early: a 4th iteration could not finish by 17:16) |
+| Guard-hook blocks on frozen paths | 0 | 1, false positive: a Monitor `until`-loop that named the validator's log and used `pgrep -f` (no write attempted) |
+| Other blocked tool calls | 2 (sleep rule; Monitor under worktree isolation) | 3 (writes to `/tmp` under isolation; `git -C .`; chained `sleep`) |
+| Orchestrator interventions | 0 | 2 (resume after the runtime-forced hand-back; deadline +55 min) |
+
+- Hypothesis (to test in the final interleaved bench): C1's iter 2 is faster than A1's best (10.023 vs 10.101 ms) and than C (10.311 in the harness); the two runs used different mechanisms (A1: fuse the AR result, residual add and LNC swap via SBUF→SBUF `gpsimd_dma`; C1: AG + local sum), so they may compose.
+- C1's own reading of iter 3: the single-rounding residual update changes numerics at one fragile position; its untested suggestion is to keep iter 3's copy removal with the base's two-step rounding (Hypothesis).
+- Setup C's per-layer ρ report was not available: the megakernel has no per-layer capture (validator `op_boundary` / `router` rows not measurable), so C's extra feedback was the full validator rows + the per-phase profile table.
+
+### Earlier notes from the C1 run
 
 - C1 launched 10:21 UTC (budget to 16:21), worktree `wt/c1` = `7fd70dc` + the `main.py` load hook (`689a988`; no-op for fresh builds), same prompt as A1 except the setup block.
 - Iter 1 (`65486dc`): per-layer SBUF all-reduces → SBUF all-gather (4 ranks) + local fp32 sum of the 4 partials, then the LNC exchange. Compile 942 s; **validator v1.1 PASS, but run-to-run 0/64 identical** (all baseline and A1 builds 64/64); KL ratio 0.943, worst position max KL 1.06 (top-1 unchanged), ppl 8.369; **TKG p50 10.034 ms** (10.011, 10.057).

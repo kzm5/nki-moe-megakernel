@@ -335,7 +335,7 @@ def _sb2sb_all_reduce_residual_add(sharded_sb, residual_sb, dtype, rg, prg_id, n
             dst=out_sb[:, nl.ds(other * H1_SHARD, H1_SHARD)],
             send_to_rank=other,
             recv_from_rank=other,
-            pipe_id=0,
+            pipe_id=1,  # separate from subkernel sendrecvs on pipe 0
             dma_engine=nisa.dma_engine.gpsimd_dma,
         )
     if not in_place:

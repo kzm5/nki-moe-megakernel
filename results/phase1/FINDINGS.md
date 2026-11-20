@@ -8,7 +8,21 @@ Branch `q3/t3-fusion` (`a66879a`, worktree `.claude/worktrees/q3/wt/t3`, pushed)
 - **Validator v1.1 (frozen, run from q1q2 with `MK_DIR=…/wt/t3 ATTN_E_HOIST=1`, kind E): PASS**, `frozen_ok`, KL ratio 0.9670, 0 gross, run-to-run bit-identical; **teacher-forced scores bit-identical to E on 64/64 prompts** (the hoist changes timing only). Build `traced_Eh_trn2_229_s768`: compile 888 s; load 3,425 s because the page cache was cold (root EBS capped at 3,000 IOPS → mmap faults at ~12 MB/s; a `dd` pre-read of the 57 GB checkpoint takes 81 s, now done before every device job).
 - **Profile (same method as T3.1, `p1_prof_Eh_s768`, rank vnc_1, bucket 128): Eh 199.3 µs/layer vs E 231.3 and C 192.7 → the hoist recovers 32.0 of E's 38.6 µs/layer (83%)**; graph time 11.10 → 9.57 ms. Recovered: idle −16.0, QKV −6.7 (its DMA now 11.2 µs for 5.2 MB vs 28.2 µs for 3.8 MB: the slow QKV weight load in E was DMA-queue contention with the software-DGE builds, not missing prefetch — cause 2 of T3.1 is a consequence of cause 1), mask −4.3, RoPE −2.7, XLA glue −1.9, MoE gate_up −1.8, block_other −1.5.
 - **Remaining Eh − C = +6.6 µs/layer:** X load / Y store +5.6 (inherent to an unfused kernel fed from the graph), library-vs-vendored MoE (other +4.5, router +2.7), partly offset by collectives (XLA CC −4.2) and C's in-kernel layer glue (−3.9). No second change was tested: cause 2 disappeared with cause 1, and the rest is the call boundary itself or the MoE kernel choice.
-- `results/phase1/t3/Eh_s768_b128_phase.json`. Interleaved B / C / E / Eh benchmark (n=5, 768) running (`tools/bench_q3.sh t3 5 B C E Eh`).
+- `results/phase1/t3/Eh_s768_b128_phase.json`.
+
+**Timing (Nov 19 12:42 → 20:17 ET; `tools/bench_q3.sh t3 5 B C E Eh`, interleaved separate processes, n=5 at 768, 20/20 EXIT 0, page cache pre-warmed before each run; → `results/phase1/bench_q3_t3.json`):**
+
+| Config | p50 TKG (ms) | − E | − C (2 × pooled std) | − B (2 × pooled std) |
+|---|---|---|---|---|
+| B lib MoE | 10.579 ± 0.129 | −1.676 | +0.206 (0.225) | – |
+| C megakernel | 10.373 ± 0.094 | −1.882 | – | −0.206 (0.225) |
+| E | 12.255 ± 0.100 | – | +1.882 (0.194) | +1.676 (0.230) |
+| **Eh (hoisted mask/RoPE)** | **10.707 ± 0.086** | **−1.547** | **+0.335 (0.180)** | **+0.128 (0.218)** |
+
+- **Measured:** hoisting the mask/RoPE build recovers **1.547 of E's 1.882 ms/step over C (82%)** = 32.2 µs/layer, matching the profile's 32.0 µs/layer.
+- **Measured:** Eh is still 0.335 ms/step above C (> 2 × pooled std 0.180), so the queue's condition "E within 2 × pooled std of C" is **not met**; the remainder (~7 µs/layer) is the call boundary's X load / Y store and the library-vs-vendored MoE kernel (profile above). Eh is within noise of B (+0.128 < 0.218).
+- **Result (T3):** on trn2, ~82% of the cost fusion avoids for this attention stage is per-call setup — rebuilding the mask/RoPE tables with software-DGE DMAs, which also stalls the QKV weight load — and an unfused kernel avoids it too by taking the tables as inputs built once per step. What fusion still buys beyond that is ~7 µs/layer (0.34 ms/step at 768): no activation round trip through HBM per call, plus its own MoE kernel. Fusion's net gain over B in this session: 0.206 ms (T8: 0.20).
+- Same-session drift vs T8 (Nov 18): B 10.58 vs 10.49, C 10.37 vs 10.29, E 12.26 vs 12.14.
 
 ## 2026-11-19 10:45–11:10 — Q3 T3.1: where E's +38.6 µs/layer goes, E vs C by kernel phase (Measured)
 

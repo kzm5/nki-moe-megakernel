@@ -2,6 +2,22 @@
 
 Queue: [`docs/queues/Q1Q2.md`](../../docs/queues/Q1Q2.md). State: [`QUEUE_STATE.md`](QUEUE_STATE.md). Ledger: `~/runs/ledger.jsonl` → [`ledger.jsonl`](ledger.jsonl). Times ET unless marked UTC. Q3 (Nov 19–27, [`docs/queues/Q3.md`](../../docs/queues/Q3.md)): newest Q3 entries directly below.
 
+## 2026-11-20 10:50 → 16:08 ET — Q3 T4 run A2 (setup A), done; C2 started (Measured)
+
+Worktree `wt/a2` from `689a988` (= C1's start), prompt identical to A1's except run ids and budget (15:50–21:50 UTC). Harness records `results/phase1/t4/a2_{1..4}/`, diff `results/phase1/t4/a2.diff` (only `transformer_qwen3_moe_speculative.py`, +106/−25, gated), branch `q3/t4-a2` pushed. Checked against the validator reports.
+
+| Iter | Commit | Change (agent's description) | Compile | Validator v1.1 | Run-to-run | TKG p50 (n=2) |
+|---|---|---|---|---|---|---|
+| 1 | `b35fac0` | fold each residual add into the AR step; MoE AR on the MoE output's layout (drops 8 transposes); add the result into each residual half, own half overlapping the LNC `sendrecv` | **FAIL** (NKI: no nested function definitions) | – | – | – |
+| 2 | `100b402` | iter 1 with the views inlined | 947 s | PASS | 64/64 | 10.267 |
+| 3 | `b3fc07a` | + MoE residual add also writes the next layer's attention input (GpSimd) into a fresh residual buffer | 758 s | PASS | 64/64 | 10.235 |
+| 4 | `9767038` | + LNC `sendrecv` after each AR on `dma_engine=gpsimd_dma` (16 B/partition, standard-DMA fallback) | 741 s | PASS | 64/64 | **10.060** |
+
+- A2: 4 iterations / 4 compiles / 1 compile failure; 3/3 compiled builds pass, all deterministic; best eligible **10.060 ms** (iter 4); first validated improvement 17:40 UTC (iter 2, 10.267, within noise of C) — first clear one 21:07 UTC = 5 h 17 min after start; wall 15:50–21:07 (stopped early: a 5th iteration might not finish by 21:50), idle 0 (no runtime-forced hand-back), active 5 h 17 min; device time 5 h 15 min; 0 guard-hook blocks; 1 other blocked call (compound git read under worktree isolation); 0 interventions.
+- Like A1, A2's main gain came from moving the per-AR LNC exchange to `gpsimd_dma` (iter 4, −0.18 ms); A2 reached it in its 4th iteration, A1 in its 1st.
+- Harness note: iter 4's second benchmark load took 3,718 s (sharding 3,053 s) — the page cache is pre-warmed only at the start of each iteration, so later loads in a long iteration can run cold. Left unchanged for C2 so pair 2 runs on the same harness as A2.
+- C2 launched 21:09 UTC (budget to 03:09 UTC Nov 21), worktree `wt/c2` from `689a988`, prompt identical to C1's except run ids and budget.
+
 ## 2026-11-20 05:21 → 10:38 ET — Q3 T4 run C1 (setup C), done (Measured)
 
 Harness records `results/phase1/t4/c1_{1,2,3}/`, diff `results/phase1/t4/c1.diff` (only `transformer_qwen3_moe_speculative.py`, +101/−18, gated by `MK_AGENT_VARIANT=1`), branch `q3/t4-c1` pushed. Verdicts and run-to-run checked from the validator reports, not the agent's account.

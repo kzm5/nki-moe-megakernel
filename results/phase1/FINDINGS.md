@@ -2,6 +2,14 @@
 
 Queue: [`docs/queues/Q1Q2.md`](../../docs/queues/Q1Q2.md). State: [`QUEUE_STATE.md`](QUEUE_STATE.md). Ledger: `~/runs/ledger.jsonl` → [`ledger.jsonl`](ledger.jsonl). Times ET unless marked UTC. Q3 (Nov 19–27, [`docs/queues/Q3.md`](../../docs/queues/Q3.md)): newest Q3 entries directly below.
 
+## 2026-11-22 17:30 ET — Q3 resumed after the credit outage (Measured)
+
+- Commit `073ccec` (q3 worktree; `phase0/trn2-setup` at `5fa00c6`, RESEARCH_PLAN rev 45). Free disk **56 GB** of 678 (99 GB on Nov 20); RAM 119 GiB available, swap 0 used.
+- Running jobs: none (`pgrep -af python`: system daemons only; no `neuron`/`run_py` processes; device idle per `neuron-ls`).
+- C2 state: worktree `wt/c2`, branch `q3/t4-c2` at `b092e45`, clean (agent scratch only), now pushed to `mine`. Two iterations finished: iter 1 `1e7ddd6` (all-gather + local fp32 sum) and iter 2 `b092e45` (+ next layer's QKV weights prefetched to SBUF ahead of the MoE collective). Records copied to `results/phase1/t4/c2_{1,2}/`, diff `results/phase1/t4/c2.diff` (+137/−32; `transformer_qwen3_moe_speculative.py` gated by `MK_AGENT_VARIANT=1`, two legacy attention files extended with optional kwargs, default path unchanged).
+- C2 stopped at **23:29:25 UTC Nov 20** ("You've hit your 5-hour limit", transcript `agent-ae89750a…`), 2 h 20 min into its budget, while waiting on iter 2's benchmark; the harness finished iter 2 at 00:46 UTC. No iteration 3 was committed. The orchestrator session stopped ~02:40 UTC Nov 21.
+- Frozen validator v1.1 (harness run, `frozen_ok`): **both iterations PASS**, KL ratio 0.9635, 0 gross, ppl 8.383, in-process run-to-run 64/64; TKG p50 (n=2) iter 1 10.041, iter 2 **10.035 ms**. Cross-process check: the iter 1 and iter 2 captures (separate processes and builds; iter 2 changes only weight prefetch) are bit-identical on 64/64 prompts (`tools/r2r_compare.py` → `results/phase1/t4/c2_1_vs_c2_2.json`), so both are deterministic, unlike C1's iter 1 with the same idea.
+
 ## 2026-11-20 10:50 → 16:08 ET — Q3 T4 run A2 (setup A), done; C2 started (Measured)
 
 Worktree `wt/a2` from `689a988` (= C1's start), prompt identical to A1's except run ids and budget (15:50–21:50 UTC). Harness records `results/phase1/t4/a2_{1..4}/`, diff `results/phase1/t4/a2.diff` (only `transformer_qwen3_moe_speculative.py`, +106/−25, gated), branch `q3/t4-a2` pushed. Checked against the validator reports.

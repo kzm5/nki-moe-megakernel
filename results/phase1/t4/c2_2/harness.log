@@ -1,0 +1,3 @@
+COMPILE: OK (Compiling and tracing time: 741.1598292450071)
+VALIDATOR v1.1: PASS
+TKG p50: 10.035 ms (runs 9.989, 10.081)   (unmodified megakernel: ~10.29-10.36 ms in recent sessions)

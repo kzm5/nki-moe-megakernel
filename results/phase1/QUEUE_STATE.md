@@ -34,7 +34,7 @@ XLA `traced_xla_trn2_229_s768_greedy` (production), `…_vcap` (validator captur
 
 # Q3 queue state (queue: `docs/queues/Q3.md`, read-only; Nov 19–27)
 
-Updated: 2026-11-20 10:52 ET. Checkpoint `SUMMARY_Q3_mid.md` due Sun Nov 22 12:00 ET; Q3 done Fri Nov 27 12:00 ET.
+Updated: 2026-11-22 17:50 ET (resumed after the Nov 20 21:40 ET – Nov 22 credit outage). Checkpoint `SUMMARY_Q3_mid.md` written Nov 19; Q3 done Fri Nov 27 12:00 ET.
 
 ## Environment
 - Results worktree `.claude/worktrees/q3` (branch `worktree-q3`; `git pull --no-rebase mine phase0/trn2-setup`, then `git push mine HEAD:phase0/trn2-setup`). Kernel work: worktrees on `q3/<task>` branches, pushed to `mine`, never merged here.
@@ -49,7 +49,7 @@ Updated: 2026-11-20 10:52 ET. Checkpoint `SUMMARY_Q3_mid.md` due Sun Nov 22 12:0
 | T2.2 fp32 router kernel | **skipped by rule** (flips do not fall ≥ 2 pp; the change would be a no-op) | FINDINGS T2.1 |
 | T3.1 E vs C attribution | done Nov 19 11:10: per-call mask/RoPE build (software-DGE stall) ≈ 20 of E's +38.6 µs/layer | `tools/phase_attrib.py`, `results/phase1/t3/` |
 | T3.2 E-copy changes | done Nov 19 20:20: Eh 10.707 vs E 12.255 / C 10.373 / B 10.579 ms (n=5) — 82% of E − C recovered; not within 2σ of C | branch `q3/t3-fusion` (`wt/t3`), `bench_q3_t3.json` |
-| T4 agent study A1/C1(/A2/C2) | A1 done (best 10.101 ms, 3/3 pass); C1 done (best eligible 10.023 ms iter 2; iter 1 race → invalid; iter 3 fails worst_pos); **A2 running** 15:50–21:50 UTC Nov 20, then C2; then final interleaved bench (best variants vs C, B; n=5) | `tools/agent_eval.sh`, `results/phase1/t4/`, branches `q3/t4-{a1,c1,a2,c2}` |
+| T4 agent study A1/C1/A2/C2(r) | A1 done (best 10.101 ms, 3/3 pass); C1 done (best eligible 10.023 ms iter 2; iter 1 race → invalid; iter 3 fails worst_pos); A2 done (best 10.060 ms iter 4, 3/3 compiled pass); **C2 partial** (stopped by the usage limit 23:29 UTC Nov 20 after 2 iters, both PASS + deterministic, best 10.035 ms; kept as a record); **C2r running** 22:36 UTC Nov 22 → 04:36 UTC Nov 23 (restart, same commit and prompt); then final interleaved bench (`tools/bench_q3_final.sh`: best eligible variant vs C, B; 768 n=5, 2048/4096 n=3) | `tools/agent_eval.sh`, `results/phase1/t4/`, branches `q3/t4-{a1,c1,a2,c2,c2r}` |
 | Mid summary | written Nov 19 (T1–T3 complete) | `SUMMARY_Q3_mid.md` |
 | Wrap-up | due Nov 27 12:00 | |
 

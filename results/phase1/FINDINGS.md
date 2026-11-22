@@ -2,6 +2,12 @@
 
 Queue: [`docs/queues/Q1Q2.md`](../../docs/queues/Q1Q2.md). State: [`QUEUE_STATE.md`](QUEUE_STATE.md). Ledger: `~/runs/ledger.jsonl` → [`ledger.jsonl`](ledger.jsonl). Times ET unless marked UTC. Q3 (Nov 19–27, [`docs/queues/Q3.md`](../../docs/queues/Q3.md)): newest Q3 entries directly below.
 
+## 2026-11-22 17:36 ET — Q3 T4 run C2r (setup C restart) launched
+
+- Kevin (Nov 22): the credit outage is a tooling failure, not a setup effect. C2 is kept as a partial record; C2r restarts it from scratch.
+- Worktree `wt/c2r`, branch `q3/t4-c2r` from `689a988` (= C1's and C2's start). Prompt `results/phase1/t4/prompt_C2r.md` = C1's prompt with only run ids, paths and budget changed (checked by diff), waiting rule included. Fresh general-purpose subagent, launched 22:36 UTC; budget 22:36 UTC Nov 22 → **04:36 UTC Nov 23**.
+- Environment difference from C2 (orchestrator, no hint): `~/runs/agents/c2/` is `chmod 000` for the run so C2r cannot read its predecessor's feedback; restored afterwards. Other runs' records stay as readable as they were for C2.
+
 ## 2026-11-22 17:30 ET — Q3 resumed after the credit outage (Measured)
 
 - Commit `073ccec` (q3 worktree; `phase0/trn2-setup` at `5fa00c6`, RESEARCH_PLAN rev 45). Free disk **56 GB** of 678 (99 GB on Nov 20); RAM 119 GiB available, swap 0 used.

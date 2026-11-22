@@ -122,6 +122,9 @@ I_PER_EXPERT = 768 // TP_DEGREE  # 192
 
 SBM_SIZE_BYTES = 200 * 1024
 
+# Collective/residual fast path (BxS == 1 only).
+AGENT_VARIANT = _os.environ.get("MK_AGENT_VARIANT") == "1"
+
 # ---------------------------------------------------------------------------
 # Full-attention mask builder (no SWA — every Qwen3 layer is full attention)
 # ---------------------------------------------------------------------------
@@ -310,6 +313,30 @@ def _store_shard_interleaved_sb_to_hbm(dst_hbm, src_sb, B, S_tkg, prg_id):
         )
 
 
+def _all_reduce_residual_add(sharded_sb, residual_sb, dtype, rg, prg_id, n_prgs):
+    """BxS == 1: TP all-reduce of this core's H shard [H0, H1_SHARD], LNC swap via
+    GPSIMD DMA, both halves added straight into ``residual_sb`` [H0, H1]."""
+    ar_sb = nl.ndarray((H0, H1_SHARD), dtype=dtype, buffer=nl.sbuf)
+    nccl.all_reduce(dsts=[ar_sb], srcs=[sharded_sb], op=nl.add, replica_group=rg)
+    if n_prgs > 1:
+        recv_sb = nl.ndarray((H0, H1_SHARD), dtype=dtype, buffer=nl.sbuf)
+        nisa.sendrecv(
+            src=ar_sb,
+            dst=recv_sb,
+            send_to_rank=1 - prg_id,
+            recv_from_rank=1 - prg_id,
+            pipe_id=0,
+            dma_engine=nisa.dma_engine.gpsimd_dma,
+        )
+    own = nl.ds(prg_id * H1_SHARD, H1_SHARD)
+    nisa.tensor_tensor(dst=residual_sb[:, own], data1=residual_sb[:, own],
+                       data2=ar_sb, op=nl.add)
+    if n_prgs > 1:
+        other = nl.ds((1 - prg_id) * H1_SHARD, H1_SHARD)
+        nisa.tensor_tensor(dst=residual_sb[:, other], data1=residual_sb[:, other],
+                           data2=recv_sb, op=nl.add)
+
+
 def _multilayer_body(
     X,             # [B, S_tkg, H]                    bf16  HBM
     Wqkv_list,     # tuple of L: [H, I_QKV] pre-fused  bf16  HBM
@@ -335,6 +362,7 @@ def _multilayer_body(
     dtype = X.dtype
     BxS = B * S_tkg
     T = BxS
+    fast_cc = AGENT_VARIANT and BxS == 1
 
     # Capture post-update K/V refs so NKI preserves the in-place scatter
     # (otherwise NCC may DCE it as a dead store to a read-only input).
@@ -454,9 +482,12 @@ def _multilayer_body(
         # outer H1_SHARD / inner BxS — the layout _sb2sb_all_reduce_gather wants.
         attn_sharded_sb = attn_kernel_out_sb.reshape((H0, H1_SHARD * BxS))
 
-        attn_gathered_sb, _ = _sb2sb_all_reduce_gather(
-            attn_sharded_sb, dtype, rg, prg_id, n_prgs, H0, H1, H1_SHARD, BxS
-        )
+        if fast_cc:
+            _all_reduce_residual_add(attn_sharded_sb, residual_sb, dtype, rg, prg_id, n_prgs)
+        else:
+            attn_gathered_sb, _ = _sb2sb_all_reduce_gather(
+                attn_sharded_sb, dtype, rg, prg_id, n_prgs, H0, H1, H1_SHARD, BxS
+            )
 
         # Free attention's stack/heap before MoE.
         while sbm.heap:
@@ -464,8 +495,9 @@ def _multilayer_body(
         sbm.set_auto_alloc(True)
 
         # Residual add #1
-        nisa.tensor_tensor(dst=residual_sb, data1=residual_sb,
-                           data2=attn_gathered_sb, op=nl.add)
+        if not fast_cc:
+            nisa.tensor_tensor(dst=residual_sb, data1=residual_sb,
+                               data2=attn_gathered_sb, op=nl.add)
 
         # ===== MoE block ==================================================
         sbm.set_name_prefix(f"L{layer_idx}_moe_")
@@ -548,28 +580,34 @@ def _multilayer_body(
             output_in_sbuf=True,
             output_dtype=dtype,
         )
-        # Transpose [H0, BxS, H1_SHARD] → [H0, H1_SHARD*BxS] for _sb2sb_all_reduce_gather.
-        # Per-column copy avoids illegal-partition-step asserts on a strided view.
-        moe_sharded_sb = nl.ndarray((H0, H1_SHARD * BxS), dtype=dtype,
-                                     buffer=nl.sbuf,
-                                     name=f"L{layer_idx}_moe_sharded_sb")
-        for h1s in range(H1_SHARD):
-            nisa.tensor_copy(
-                dst=moe_sharded_sb[:, h1s * BxS : (h1s + 1) * BxS],
-                src=moe_out_sb[:, :, h1s],
-            )
+        if fast_cc:
+            # BxS == 1: [H0, 1, H1_SHARD] already is the [H0, H1_SHARD] layout.
+            _all_reduce_residual_add(moe_out_sb.reshape((H0, H1_SHARD)), residual_sb,
+                                     dtype, rg, prg_id, n_prgs)
+        else:
+            # Transpose [H0, BxS, H1_SHARD] → [H0, H1_SHARD*BxS] for _sb2sb_all_reduce_gather.
+            # Per-column copy avoids illegal-partition-step asserts on a strided view.
+            moe_sharded_sb = nl.ndarray((H0, H1_SHARD * BxS), dtype=dtype,
+                                         buffer=nl.sbuf,
+                                         name=f"L{layer_idx}_moe_sharded_sb")
+            for h1s in range(H1_SHARD):
+                nisa.tensor_copy(
+                    dst=moe_sharded_sb[:, h1s * BxS : (h1s + 1) * BxS],
+                    src=moe_out_sb[:, :, h1s],
+                )
 
-        moe_gathered_sb, _ = _sb2sb_all_reduce_gather(
-            moe_sharded_sb, dtype, rg, prg_id, n_prgs, H0, H1, H1_SHARD, BxS
-        )
+            moe_gathered_sb, _ = _sb2sb_all_reduce_gather(
+                moe_sharded_sb, dtype, rg, prg_id, n_prgs, H0, H1, H1_SHARD, BxS
+            )
 
         while sbm.heap:
             sbm.pop_heap()
         sbm.set_auto_alloc(True)
 
         # Residual add #2
-        nisa.tensor_tensor(dst=residual_sb, data1=residual_sb,
-                           data2=moe_gathered_sb, op=nl.add)
+        if not fast_cc:
+            nisa.tensor_tensor(dst=residual_sb, data1=residual_sb,
+                               data2=moe_gathered_sb, op=nl.add)
 
     # Single HBM store of the post-residual hidden state (inverse of X load).
     Y = nl.ndarray((B, S_tkg, H), dtype=dtype, buffer=nl.shared_hbm, name="Y")

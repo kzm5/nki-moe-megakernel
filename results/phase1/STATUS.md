@@ -7,3 +7,4 @@
 
 - 2026-11-19 12:55 ET — Q3: T1 done; T2 done (fp32 router already in B/C/XLA; T2.2 skipped by rule); T3.1 done; T3.2 Eh passes v1.1 and recovers 32 of E's 38.6 µs/layer in the profile; bench running.
 - 2026-11-19 22:45 ET — Q3 T3 done (Eh recovers 82% of E − C; 10.707 vs C 10.373 ms); mid summary written; T4 A1 agent run started (6 h).
+- 2026-11-22 17:55 ET — Q3 resumed after the credit outage (no work Nov 21–22). C2 partial recorded (2 iters, both pass v1.1, deterministic, best 10.035 ms); C2r (restart) running 22:36–04:36 UTC; then the final B/C/V bench. Free disk 56 GB; deletion list awaiting Kevin.

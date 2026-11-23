@@ -66,7 +66,7 @@ Updated: 2026-11-23 16:10 ET. **Q3 done** (all tasks; `SUMMARY_Q3.md`), ahead of
 
 # Q4Q5 queue state (queue: `docs/queues/Q4Q5.md`, read-only; Nov 24–29)
 
-Updated: 2026-11-23 17:55 ET. Deadlines (ET): T1 merge commit by Wed Nov 25 08:00; Q4 Thu Nov 26 12:00; Q5 Sun Nov 29 18:00.
+Updated: 2026-11-23 18:30 ET. Deadlines (ET): Q4 Thu Nov 26 12:00; Q5 Sun Nov 29 18:00. trn3 day shelved (Kevin, Nov 23; queue `f6176a8`): no T1 merge deadline, no trn3 work.
 
 ## Environment
 - Results in the main checkout (`phase0/trn2-setup`); kernel work in worktree `.claude/worktrees/q4/t1` (branch `q4/t1-merge-v`). Frozen validator still run from the q1q2 worktree.

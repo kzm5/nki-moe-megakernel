@@ -1,0 +1,110 @@
+{
+ "cand": "/home/ubuntu/runs/p1/val/agent_a1_2",
+ "base": "/home/ubuntu/runs/p1/val/xla_base",
+ "base_logits": "/home/ubuntu/runs/p1/val/xla_plain",
+ "cand_device": {
+  "kind": "nki",
+  "cdir": "/home/ubuntu/qwen-30b-a3b/agent_a1_2",
+  "capture": false,
+  "mutant": ""
+ },
+ "pass": true,
+ "rows_failed": [],
+ "rows_not_measurable": [
+  "op_boundary",
+  "router"
+ ],
+ "spec_version": "1.1",
+ "rows": {
+  "op_boundary": {
+   "pass": null,
+   "status": "not_measurable",
+   "why": "no per-layer capture"
+  },
+  "router": {
+   "pass": null,
+   "status": "not_measurable",
+   "why": "no router capture"
+  },
+  "logits_tf": {
+   "pass": true,
+   "kl_mean_cand": 0.0021723445327071628,
+   "kl_mean_base": 0.002259803823545254,
+   "kl_ratio": 0.9612978392518682,
+   "top1_golden_cand": 0.9873347878456116,
+   "top1_golden_base": 0.9865087866783142,
+   "n_positions": 7264
+  },
+  "worst_pos": {
+   "pass": true,
+   "max_kl": 0.8579641100649193,
+   "max_kl_at": [
+    "p03",
+    92
+   ],
+   "base_kl_there": 0.028158669899198723,
+   "gross_count": 0,
+   "gross_at": [],
+   "kl_hist_edges": [
+    0.001,
+    0.01,
+    0.05,
+    0.2,
+    1.0
+   ],
+   "kl_hist_cand": [
+    5261,
+    1701,
+    268,
+    30,
+    4,
+    0
+   ]
+  },
+  "perplexity": {
+   "pass": true,
+   "ppl_cand": 8.384853065332619,
+   "ppl_base": 8.39334410426494,
+   "ppl_golden": 8.342472201491121,
+   "rel_delta": -0.0010116395594941263,
+   "n_tokens": 8176
+  },
+  "run_to_run": {
+   "in_process": {
+    "identical": 64,
+    "n": 64,
+    "differ": []
+   },
+   "pass": true,
+   "status": "bit_identical"
+  }
+ },
+ "thresholds": {
+  "rho_median_max": 1.25,
+  "rho_layer_max": 2.0,
+  "router_pp_max": 0.5,
+  "kl_ratio_max": 1.25,
+  "gross_kl": 0.2,
+  "base_clean_kl": 0.01,
+  "ppl_rel_max": 0.005,
+  "gross_requires_top1_change": true
+ },
+ "hashes": {
+  "validator": {
+   "validate.py": "a03e3ab14b8282ac4ed102af26f06ac14aceec1588a30a6eed6014588a1ed31f",
+   "device.py": "e26dbb468a96b7bf992343a6bd043a8cbacf57907c1f29673b7a93dbc3e3379c",
+   "golden.py": "5e2d0aecdcc8b2295315973183ebec8ccf0684b340adc7425b5fed4d40c72ae5",
+   "mutants.py": "f4481b6f6a7f66c48b0b0559a60a577476d556338477b46fbf3f4fe09bc0c6f0",
+   "corpus.py": "ec6634b67798c030d9e4d116c7b9bfd3f07c7bff3c6fe564a14fbaf9aeeb0773"
+  },
+  "spec": "b8fa47b2e9f8b0843091afcebba1a905a3f30f4abba52e22b39166b0fe612d30",
+  "spec_file": "spec_v1.1.json",
+  "corpus": "8d21c5280ce29030d88f7d04fb75e2008304146d602fd16f48377b141cbd8d73",
+  "golden_manifest": "1cb69418cbe33170f8461b37d830773fde20ad0bce702bbe21962175134b408a",
+  "refs_manifest": "f3d60037a0ad8d69025df8162df14321a0fb143de670e0d5bd82f80f6c0ea30f",
+  "n_golden_files": 81,
+  "n_refs": 64
+ },
+ "frozen_ok": true,
+ "scored_utc": "2026-11-20T06:38:02Z"
+}

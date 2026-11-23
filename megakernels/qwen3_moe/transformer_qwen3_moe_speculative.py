@@ -314,6 +314,7 @@ def _store_shard_interleaved_sb_to_hbm(dst_hbm, src_sb, B, S_tkg, prg_id):
 
 def _sum_partials(dst, src, W):
     """dst = sum of the TP_DEGREE [H0, W] column blocks of src, accumulated in fp32."""
+    assert TP_DEGREE >= 3, "TP_DEGREE=2 would add column block 1 twice"
     acc_sb = nl.ndarray((H0, W), dtype=nl.float32, buffer=nl.sbuf)
     nisa.tensor_tensor(dst=acc_sb, data1=src[:, 0:W], data2=src[:, W:2 * W], op=nl.add)
     for r in range(2, TP_DEGREE - 1):
@@ -431,7 +432,8 @@ def _multilayer_body(
     )
 
     if _AG_REDUCE:
-        ag_src_attn_sb = nl.ndarray((H0, H1_SHARD * BxS), dtype=dtype, buffer=nl.sbuf,
+        assert BxS == 1, "MK_AGENT_VARIANT=1 is only validated at BxS == 1"
+        ag_src_attn_sb =nl.ndarray((H0, H1_SHARD * BxS), dtype=dtype, buffer=nl.sbuf,
                                     name="ag_src_attn_sb")
         ag_src_moe_sb = nl.ndarray((H0, H1_SHARD * BxS), dtype=dtype, buffer=nl.sbuf,
                                    name="ag_src_moe_sb")

@@ -1,4 +1,4 @@
-# Queue TRN3 — one day on trn3.48xlarge (Nov 25–26)
+# Queue TRN3 — one day on trn3 (SHELVED Nov 23: no affordable trn3 capacity; kept for future work)
 
 Written by Kevin's planning assistant. Read-only for the agent. Run in its own Claude Code session on the trn3
 instance (us-east-2), launched from a copy of the trn2 AMI. Work on branch **`trn3/day`** (create it from

@@ -10,3 +10,4 @@
 - 2026-11-22 17:55 ET — Q3 resumed after the credit outage (no work Nov 21–22). C2 partial recorded (2 iters, both pass v1.1, deterministic, best 10.035 ms); C2r (restart) running 22:36–04:36 UTC; then the final B/C/V bench. Free disk 56 GB; deletion list awaiting Kevin.
 - 2026-11-23 04:20 ET — Q3 T4: C2r done (best eligible 10.082 ms; iter 2 non-deterministic). Final bench V = C1 iter 2 (cross-process bit-identical): 768 n=5 V 10.050 ± 0.015, C 10.224 ± 0.007, B 10.500 ± 0.013 ms → V − B −4.3% (< Gate 4's 5%). 2048/4096 running. Free disk 20 GB.
 - 2026-11-23 16:10 ET — Q3 done. V (C1 iter 2) 10.050 ms at 768: −1.7% vs C, −4.28% vs B (Gate 4 5% not met at 768; 7.61 / 8.57% at 2048 / 4096, unvalidatable builds). SUMMARY_Q3.md written; device idle; free disk 71 GB.
+- 2026-11-23 17:55 ET — Q4Q5 started; device idle; T1 (merge V with asserts) next.

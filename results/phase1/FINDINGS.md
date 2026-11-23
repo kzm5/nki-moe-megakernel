@@ -2,6 +2,14 @@
 
 Queue: [`docs/queues/Q1Q2.md`](../../docs/queues/Q1Q2.md). State: [`QUEUE_STATE.md`](QUEUE_STATE.md). Ledger: `~/runs/ledger.jsonl` → [`ledger.jsonl`](ledger.jsonl). Times ET unless marked UTC. Q3 (Nov 19–27, [`docs/queues/Q3.md`](../../docs/queues/Q3.md)): newest Q3 entries directly below.
 
+## 2026-11-23 17:50 ET — Q4 state on start (Measured)
+
+Queue [`docs/queues/Q4Q5.md`](../../docs/queues/Q4Q5.md) (Nov 24–29); CLAUDE.md reading list now points to it. Q4/Q5 entries go directly below this line.
+- Commit `8b5a717` on `phase0/trn2-setup` (main checkout, = `mine`); V = `35309c3` on `q3/t4-c1` (head `ede5298` = C1 iter 3, fails v1.1, not merged).
+- Running jobs: none (no `python`/`neuron`/`run_*` processes; `neuron-ls` device idle). RAM 118 GiB available.
+- Disk 71 GB free of 678; compile cache 83 GB. Builds present: B/C/V at 768/2048/4096, E 768/2048/4096, Eh 768 only; no XLA build at 2048.
+- Plan: T1 (merge, needed by Wed 08:00) → T3 (V captures) → T2 (Eh compiles + bench) → T4 (2048 validation) → T5 (CPU, alongside device jobs).
+
 ## 2026-11-22 22:04 → 2026-11-23 15:53 ET — Q3 T4 final interleaved bench: V (C1 iter 2) vs C and B (Measured)
 
 `tools/q3_final_chain.sh` → `tools/bench_q3_final.sh`; log `~/runs/p1/bench_q3_final.log`; → `results/phase1/bench_q3_final.json`. 33 runs (+ 2 V compiles), all `EXIT_STATUS=0`; separate processes, rounds interleaved B → C → V, page cache pre-warmed before each run; C at 768 loads its pre-sharded weights, all others shard on load.

@@ -63,3 +63,23 @@ Updated: 2026-11-23 16:10 ET. **Q3 done** (all tasks; `SUMMARY_Q3.md`), ahead of
 - Non-deterministic variants (run-to-run ≠ 64/64) are reported separately, never as the best validated result (Kevin, Nov 20).
 - A runtime-forced early hand-back is resumed with a neutral message and the deadline is extended by the idle time; active and wall time are reported for every run (Kevin, Nov 20).
 - Disk 99 GB free on Nov 20 10:50 ET (validator dirs ~4.2 GB each, 112 GB total; compile cache 72 GB, active). Enough for A2/C2; pre-sharding the final-bench candidates (59 GB each) would need deletions — not planned.
+
+# Q4Q5 queue state (queue: `docs/queues/Q4Q5.md`, read-only; Nov 24–29)
+
+Updated: 2026-11-23 17:55 ET. Deadlines (ET): T1 merge commit by Wed Nov 25 08:00; Q4 Thu Nov 26 12:00; Q5 Sun Nov 29 18:00.
+
+## Environment
+- Results in the main checkout (`phase0/trn2-setup`); kernel work in worktree `.claude/worktrees/q4/t1` (branch `q4/t1-merge-v`). Frozen validator still run from the q1q2 worktree.
+
+## Tasks
+| Task | Status | Paths |
+|---|---|---|
+| Start of session | done Nov 23 17:50 | FINDINGS "Q4 state on start"; CLAUDE.md reading list → Q4Q5 |
+| T1 prepare V for merge | in progress | – |
+| T2 Eh at 2048/4096 | pending | – |
+| T3 V determinism (3 captures) | pending | – |
+| T4 validate 2048 builds | pending | – |
+| T5 H2.4 all-reduce precision | pending | – |
+| T6 final interleaved session | pending (Q5) | – |
+| T7 tables and figures | pending (Q5) | – |
+| T8 freeze | pending (Q5) | – |

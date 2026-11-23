@@ -2,6 +2,25 @@
 
 Queue: [`docs/queues/Q1Q2.md`](../../docs/queues/Q1Q2.md). State: [`QUEUE_STATE.md`](QUEUE_STATE.md). Ledger: `~/runs/ledger.jsonl` → [`ledger.jsonl`](ledger.jsonl). Times ET unless marked UTC. Q3 (Nov 19–27, [`docs/queues/Q3.md`](../../docs/queues/Q3.md)): newest Q3 entries directly below.
 
+## 2026-11-22 22:04 → 2026-11-23 15:53 ET — Q3 T4 final interleaved bench: V (C1 iter 2) vs C and B (Measured)
+
+`tools/q3_final_chain.sh` → `tools/bench_q3_final.sh`; log `~/runs/p1/bench_q3_final.log`; → `results/phase1/bench_q3_final.json`. 33 runs (+ 2 V compiles), all `EXIT_STATUS=0`; separate processes, rounds interleaved B → C → V, page cache pre-warmed before each run; C at 768 loads its pre-sharded weights, all others shard on load.
+
+- **V = C1 iter 2 (`35309c3`, `MK_AGENT_VARIANT=1`):** at 768 the build `agent_c1_2` passed v1.1 (in-process run-to-run 64/64) and a second teacher-forced capture in a separate process (frozen `device.py`, 03:04–03:11 UTC) is **bit-identical on 7,264/7,264 positions** (`results/phase1/t4/c1_2_r2r.json`). V at 2048 / 4096: compiled from the same pinned worktree (57 / 72 min jobs incl. warm-up load); not validated (validator is 768-only).
+
+| Seq | n | B p50 | C p50 | V p50 | V − C (2 × pooled std) | C gain over B | **V gain over B** (2 × pooled std) | Gate 4 (≥ 5%) for V |
+|---|---|---|---|---|---|---|---|---|
+| 768 | 5 | 10.500 ± 0.013 | 10.224 ± 0.007 | **10.050 ± 0.015** | −0.174 (0.024) | 2.63% | **4.28%** (−0.450 ms; 0.028) | **not met** |
+| 2048 | 3 | 10.893 ± 0.008 | 10.323 ± 0.003 | **10.064 ± 0.003** | −0.259 (0.007) | 5.23% | **7.61%** (−0.829 ms; 0.012) | met (build not validated) |
+| 4096 | 3 | 11.089 ± 0.032 | 10.401 ± 0.034 | **10.139 ± 0.019** | −0.263 (0.055) | 6.21% | **8.57%** (−0.951 ms; 0.053) | met (build not validated) |
+
+p99 (ms): B 11.242 / 11.334 / 11.583; C 10.722 / 10.726 / 10.873; V 10.523 / 10.457 / 10.463.
+
+- **Measured:** V is faster than C at every length by far more than 2 × pooled std (−0.17 / −0.26 / −0.26 ms = −1.7 / −2.5 / −2.5%). The collectives change takes the megakernel's net gain over B from 2.6 / 5.2 / 6.2% to 4.3 / 7.6 / 8.6%.
+- **Measured:** at the validated length (768), V's gain over B is 4.28% — below Gate 4's 5%. At 2048 and 4096 it is 7.6% and 8.6%, but those builds are the validated source at another `--seq-len`, not validated builds (the frozen `validate.py run` passes no `--seq-len`). Plan discrepancy: Gate 4 does not state a sequence length; at 2048/4096 even C alone clears 5% (5.2 / 6.2%; T8 gave 5.4 / 6.5%).
+- Measured: V's latency is nearly flat in context (768 → 4096: +0.09 ms; C +0.18, B +0.59).
+- Day-to-day: C at 768 is 10.224 here vs 10.373 (T3 session, Nov 19) and 10.291 (T8, Nov 18); B 10.500 vs 10.579 / 10.493. Same-session differences are what count.
+
 ## 2026-11-22 17:36 → 22:03 ET — Q3 T4 run C2r (setup C), done; final bench started (Measured)
 
 Worktree `wt/c2r` from `689a988`, prompt `results/phase1/t4/prompt_C2r.md`. Records `results/phase1/t4/c2r_{1,2}/`, diff `results/phase1/t4/c2r.diff` (only `transformer_qwen3_moe_speculative.py`, +68/−20, gated by `MK_AGENT_VARIANT=1` and BxS == 1), branch `q3/t4-c2r` pushed. Verdicts and run-to-run read from the validator reports.

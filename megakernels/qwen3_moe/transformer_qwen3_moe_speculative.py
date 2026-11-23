@@ -314,10 +314,20 @@ def _store_shard_interleaved_sb_to_hbm(dst_hbm, src_sb, B, S_tkg, prg_id):
 
 
 def _all_reduce_residual_add(sharded_sb, residual_sb, dtype, rg, prg_id, n_prgs):
-    """BxS == 1: TP all-reduce of this core's H shard [H0, H1_SHARD], LNC swap via
-    GPSIMD DMA, both halves added straight into ``residual_sb`` [H0, H1]."""
+    """BxS == 1: TP all-reduce of this core's H shard [H0, H1_SHARD] as all-gather +
+    local sum, LNC swap via GPSIMD DMA, both halves added into ``residual_sb`` [H0, H1]."""
+    # All-gather the TP partials, then sum locally in rank order (fp32).
+    gath_sb = nl.ndarray((H0, TP_DEGREE * H1_SHARD), dtype=dtype, buffer=nl.sbuf)
+    nccl.all_gather(srcs=[sharded_sb], dsts=[gath_sb], replica_group=rg, collective_dim=1)
+    acc_sb = nl.ndarray((H0, H1_SHARD), dtype=nl.float32, buffer=nl.sbuf)
+    nisa.tensor_tensor(dst=acc_sb, data1=gath_sb[:, 0:H1_SHARD],
+                       data2=gath_sb[:, H1_SHARD:2 * H1_SHARD], op=nl.add)
+    for r in range(2, TP_DEGREE - 1):
+        nisa.tensor_tensor(dst=acc_sb, data1=acc_sb,
+                           data2=gath_sb[:, r * H1_SHARD:(r + 1) * H1_SHARD], op=nl.add)
     ar_sb = nl.ndarray((H0, H1_SHARD), dtype=dtype, buffer=nl.sbuf)
-    nccl.all_reduce(dsts=[ar_sb], srcs=[sharded_sb], op=nl.add, replica_group=rg)
+    nisa.tensor_tensor(dst=ar_sb, data1=acc_sb,
+                       data2=gath_sb[:, (TP_DEGREE - 1) * H1_SHARD:TP_DEGREE * H1_SHARD], op=nl.add)
     if n_prgs > 1:
         recv_sb = nl.ndarray((H0, H1_SHARD), dtype=dtype, buffer=nl.sbuf)
         nisa.sendrecv(

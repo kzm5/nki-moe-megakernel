@@ -1,5 +1,10 @@
 # Resuming Phase 0 on a fresh instance from this image
 
+## Q3 update (2026-11-23, Q3 done) — read this first
+- State: `results/phase1/QUEUE_STATE.md` (Q3 section), `SUMMARY_Q3.md`. Results worktree `.claude/worktrees/q3` (branch `worktree-q3`, pushed to `phase0/trn2-setup`); kernel branches `q3/t3-fusion`, `q3/t4-{base,a1,c1,a2,c2,c2r}` on `mine`, not merged. Best collectives variant V = `35309c3` (`q3/t4-c1`), env `MK_AGENT_VARIANT=1`; builds `~/qwen-30b-a3b/agent_c1_2` (768), `traced_V_q3final_s{2048,4096}`.
+- Agent-study harness `tools/agent_eval.sh SETUP RUN ITER WORKTREE`; final bench `tools/bench_q3_final.sh` (B/C/V, needs `V_WT`, `V_768`). Cross-process determinism check `tools/r2r_rerun.sh` + `tools/r2r_compare.py`.
+- Guard hook also blocks Bash commands whose text contains the word "validator" next to `>`/`cp`/`rm` (basename match on the frozen `tools/validator`): put such text in a script file.
+
 ## Phase 1 update (2026-11-18, Q1+Q2 done) — read this first
 - State: `results/phase1/QUEUE_STATE.md`, `SUMMARY_Q1Q2.md`, `FINDINGS.md`, `DAILY.md`. Worktree `.claude/worktrees/q1q2`; pull with `git pull --no-rebase mine phase0/trn2-setup` (rebase fails on the read-only validator); `*.json` needs `git add -f`.
 - **Pre-read the lazily restored volume first** (serial reads ran at 13 MB/s, 16 parallel at ~95 MB/s): `bash tools/preread.sh ~/qwen-30b-a3b/hf_model ~/runs/p1/golden ~/runs/p1/refs <build dirs>`. With hydrated blocks a plain build loads in ~3–5 min.

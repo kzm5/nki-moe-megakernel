@@ -34,7 +34,7 @@ XLA `traced_xla_trn2_229_s768_greedy` (production), `…_vcap` (validator captur
 
 # Q3 queue state (queue: `docs/queues/Q3.md`, read-only; Nov 19–27)
 
-Updated: 2026-11-22 17:50 ET (resumed after the Nov 20 21:40 ET – Nov 22 credit outage). Checkpoint `SUMMARY_Q3_mid.md` written Nov 19; Q3 done Fri Nov 27 12:00 ET.
+Updated: 2026-11-23 16:10 ET. **Q3 done** (all tasks; `SUMMARY_Q3.md`), ahead of the Fri Nov 27 12:00 ET deadline. Device idle, no jobs running. Resumed Nov 22 after the Nov 20 21:40 ET – Nov 22 credit outage.
 
 ## Environment
 - Results worktree `.claude/worktrees/q3` (branch `worktree-q3`; `git pull --no-rebase mine phase0/trn2-setup`, then `git push mine HEAD:phase0/trn2-setup`). Kernel work: worktrees on `q3/<task>` branches, pushed to `mine`, never merged here.
@@ -49,9 +49,9 @@ Updated: 2026-11-22 17:50 ET (resumed after the Nov 20 21:40 ET – Nov 22 credi
 | T2.2 fp32 router kernel | **skipped by rule** (flips do not fall ≥ 2 pp; the change would be a no-op) | FINDINGS T2.1 |
 | T3.1 E vs C attribution | done Nov 19 11:10: per-call mask/RoPE build (software-DGE stall) ≈ 20 of E's +38.6 µs/layer | `tools/phase_attrib.py`, `results/phase1/t3/` |
 | T3.2 E-copy changes | done Nov 19 20:20: Eh 10.707 vs E 12.255 / C 10.373 / B 10.579 ms (n=5) — 82% of E − C recovered; not within 2σ of C | branch `q3/t3-fusion` (`wt/t3`), `bench_q3_t3.json` |
-| T4 agent study A1/C1/A2/C2(r) | A1 done (best 10.101 ms, 3/3 pass); C1 done (best eligible 10.023 ms iter 2; iter 1 race → invalid; iter 3 fails worst_pos); A2 done (best 10.060 ms iter 4, 3/3 compiled pass); **C2 partial** (stopped by the usage limit 23:29 UTC Nov 20 after 2 iters, both PASS + deterministic, best 10.035 ms; kept as a record); **C2r running** 22:36 UTC Nov 22 → 04:36 UTC Nov 23 (restart, same commit and prompt); then final interleaved bench (`tools/bench_q3_final.sh`: best eligible variant vs C, B; 768 n=5, 2048/4096 n=3) | `tools/agent_eval.sh`, `results/phase1/t4/`, branches `q3/t4-{a1,c1,a2,c2,c2r}` |
+| T4 agent study A1/C1/A2/C2/C2r | **done**. Best eligible (harness n=2): A1 10.101, C1 **10.023** (iter 2), A2 10.060, C2 partial 10.035 (stopped by the usage limit, kept as record), C2r 10.082 (iter 2 9.859 non-deterministic). Final bench (Nov 23, V = C1 iter 2 `35309c3`, cross-process bit-identical): V 10.050 / 10.064 / 10.139 ms vs C 10.224 / 10.323 / 10.401 vs B 10.500 / 10.893 / 11.089 at 768 / 2048 / 4096 → **gain over B 4.28 / 7.61 / 8.57%; Gate 4 (5%) not met at 768** (2048/4096 builds not validatable) | `tools/agent_eval.sh`, `tools/bench_q3_final.sh`, `results/phase1/t4/`, `bench_q3_final.json`, branches `q3/t4-{base,a1,c1,a2,c2,c2r}` |
 | Mid summary | written Nov 19 (T1–T3 complete) | `SUMMARY_Q3_mid.md` |
-| Wrap-up | due Nov 27 12:00 | |
+| Wrap-up | done Nov 23 16:10 ET | `SUMMARY_Q3.md`; 19 superseded agent builds / scoring dirs deleted (51 GB, approved Nov 23; `deletions.log`) |
 
 ## Disk and loading (Kevin, Nov 19 13:20 ET)
 - Filesystem grown to 678 GB (223 GB free); keep the per-instruction JSONs (deletion request withdrawn).

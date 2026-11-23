@@ -30,3 +30,11 @@
 - Kevin's decisions applied: disk 678 GB (JSONs kept); C pre-sharded (59 GB); swappiness 10 (Kevin); `MK_LOAD_PRESHARDED=1` hook bit-identical 64/64 + 16/16, load 149 s vs 806 s sharding on load (2,049 s before swappiness 10; Eh's cold load 2,537 s).
 - Next: C1 → decide on A2/C2 → final interleaved bench of the best variant vs C and B (n=5).
 - Blockers: none.
+
+## 2026-11-23 (Mon, 16:10 ET) — Q3 resumed and done
+- Resumed Nov 22 17:30 ET after the credit outage (no work Nov 21–22). C2 partial kept as a record (2 iters, both pass v1.1, deterministic, best 10.035 ms); restarted as **C2r**: 2 iters, best eligible 10.082 ms, iter 2 (9.859) non-deterministic → not eligible; 0 interventions.
+- **Final bench (V = C1 iter 2, all-gather + local sum; cross-process bit-identical): V 10.050 / 10.064 / 10.139 ms, C 10.224 / 10.323 / 10.401, B 10.500 / 10.893 / 11.089 at 768 / 2048 / 4096. V − C −1.7 / −2.5 / −2.5%; V gain over B 4.28 / 7.61 / 8.57% → Gate 4 (5%) not met at 768;** met at 2048/4096 on builds the 768-only validator cannot score.
+- Agent study: every run (A1, C1, A2, C2, C2r) beat C within 6 h; best eligible results within harness noise of each other (10.02–10.10). Setup C tried the riskier all-gather rewrite (2 of 3 implementations non-deterministic); setup A made only bit-exact changes.
+- Done: `SUMMARY_Q3.md`; 51 GB of superseded agent builds and their scoring dirs deleted (approved); free disk 71 GB.
+- Waiting on you: Gate 4's sequence length (V clears 5% only at 2048/4096); whether to merge V (`35309c3`, branch `q3/t4-c1`).
+- Blockers: none.

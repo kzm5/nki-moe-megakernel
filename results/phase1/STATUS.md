@@ -11,3 +11,4 @@
 - 2026-11-23 04:20 ET — Q3 T4: C2r done (best eligible 10.082 ms; iter 2 non-deterministic). Final bench V = C1 iter 2 (cross-process bit-identical): 768 n=5 V 10.050 ± 0.015, C 10.224 ± 0.007, B 10.500 ± 0.013 ms → V − B −4.3% (< Gate 4's 5%). 2048/4096 running. Free disk 20 GB.
 - 2026-11-23 16:10 ET — Q3 done. V (C1 iter 2) 10.050 ms at 768: −1.7% vs C, −4.28% vs B (Gate 4 5% not met at 768; 7.61 / 8.57% at 2048 / 4096, unvalidatable builds). SUMMARY_Q3.md written; device idle; free disk 71 GB.
 - 2026-11-23 17:55 ET — Q4Q5 started; device idle; T1 (merge V with asserts) next.
+- 2026-11-23 18:45 ET — Q4 T1 done: V + asserts merged (a62b8af); outputs bit-identical to 35309c3's build 64/64. T3 captures running.

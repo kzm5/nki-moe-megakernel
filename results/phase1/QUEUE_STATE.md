@@ -75,9 +75,9 @@ Updated: 2026-11-23 18:30 ET. Deadlines (ET): Q4 Thu Nov 26 12:00; Q5 Sun Nov 29
 | Task | Status | Paths |
 |---|---|---|
 | Start of session | done Nov 23 17:50 | FINDINGS "Q4 state on start"; CLAUDE.md reading list → Q4Q5 |
-| T1 prepare V for merge | in progress | – |
+| T1 prepare V for merge | done Nov 23 18:45: NEFF not byte-identical (HLO hashes changed); outputs bit-identical 64/64 (7,264 positions, 16/16 ppl); **merged `a62b8af`** | branch `q4/t1-merge-v` (`3843abb`), `tools/q4_t1.sh`, `t4/V_t1_vs_c1_2.json` |
 | T2 Eh at 2048/4096 | pending | – |
-| T3 V determinism (3 captures) | pending | – |
+| T3 V determinism (3 captures) | running (`tools/q4_chain.sh`; chain then runs T5, Eh compiles, T4 2048, T2 2048/4096) | log `~/runs/p1/q4_chain.log` |
 | T4 validate 2048 builds | pending | – |
 | T5 H2.4 all-reduce precision | pending | – |
 | T6 final interleaved session | pending (Q5) | – |

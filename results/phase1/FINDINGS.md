@@ -2,6 +2,14 @@
 
 Queue: [`docs/queues/Q1Q2.md`](../../docs/queues/Q1Q2.md). State: [`QUEUE_STATE.md`](QUEUE_STATE.md). Ledger: `~/runs/ledger.jsonl` → [`ledger.jsonl`](ledger.jsonl). Times ET unless marked UTC. Q3 (Nov 19–27, [`docs/queues/Q3.md`](../../docs/queues/Q3.md)): newest Q3 entries directly below.
 
+## 2026-11-23 17:52 → 18:45 ET — Q4 T1: V prepared and merged (Measured)
+
+Branch `q4/t1-merge-v` from `35309c3` (V = C1 iter 2), not from `q3/t4-c1`'s head `ede5298` (C1 iter 3 fails v1.1). Commit `3843abb` adds only two trace-time asserts in `transformer_qwen3_moe_speculative.py`: `TP_DEGREE >= 3` in `_sum_partials`, and `BxS == 1` at the top of the `_AG_REDUCE` block in `_multilayer_body` (covers every use). Run `p1_q4_t1_V768` (`tools/q4_t1.sh`): compile 931 s + frozen validator v1.1 in one process, load 2,113 s, wall 47 min, `EXIT_STATUS=0`; build `~/qwen-30b-a3b/traced_V_t1_s768`, outputs `~/runs/p1/val/V_t1_s768`.
+- **NEFF byte-for-byte: no.** `model.pt` differs (`data.pkl` 1,733,915,232 vs 1,733,921,076 B); none of the 17 NEFFs (4 CTE, 8 TKG incl. graph copies, layout) appears byte-for-byte in the `35309c3` build. All 17 were compile-cache misses, so every HLO module hash changed — including context encoding, which the asserts do not touch. Hypothesis: the HLO carries Python source-line metadata, which the two added lines shift.
+- **Fallback met: outputs bit-identical.** v1.1 PASS, frozen_ok, KL ratio 0.9596, 0 gross, ppl_rel −0.12%, in-process run-to-run bit-identical. Against the `35309c3` build's capture (`agent_c1_2`): **64/64 prompts, 7,264/7,264 positions identical (max |Δlogit| 0, 0 top-1 changes), 16/16 ppl windows identical, report rows equal** (`results/phase1/t4/V_t1_vs_c1_2.json`).
+- **Merged:** `a62b8af` (merge of `q4/t1-merge-v` into `phase0/trn2-setup`, no conflicts). Gated by `MK_AGENT_VARIANT=1` (default off; the default path is unchanged — every added instruction is under `_AG_REDUCE`). `main.py`'s pre-shard hook was already on this branch (`a59ace1`).
+- The trn3 day is shelved (Kevin, Nov 23), so the Wed 08:00 deadline for this commit no longer applies.
+
 ## 2026-11-23 17:50 ET — Q4 state on start (Measured)
 
 Queue [`docs/queues/Q4Q5.md`](../../docs/queues/Q4Q5.md) (Nov 24–29); CLAUDE.md reading list now points to it. Q4/Q5 entries go directly below this line.

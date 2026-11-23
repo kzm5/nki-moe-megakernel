@@ -2,6 +2,24 @@
 
 Queue: [`docs/queues/Q1Q2.md`](../../docs/queues/Q1Q2.md). State: [`QUEUE_STATE.md`](QUEUE_STATE.md). Ledger: `~/runs/ledger.jsonl` → [`ledger.jsonl`](ledger.jsonl). Times ET unless marked UTC. Q3 (Nov 19–27, [`docs/queues/Q3.md`](../../docs/queues/Q3.md)): newest Q3 entries directly below.
 
+## 2026-11-22 17:36 → 22:03 ET — Q3 T4 run C2r (setup C), done; final bench started (Measured)
+
+Worktree `wt/c2r` from `689a988`, prompt `results/phase1/t4/prompt_C2r.md`. Records `results/phase1/t4/c2r_{1,2}/`, diff `results/phase1/t4/c2r.diff` (only `transformer_qwen3_moe_speculative.py`, +68/−20, gated by `MK_AGENT_VARIANT=1` and BxS == 1), branch `q3/t4-c2r` pushed. Verdicts and run-to-run read from the validator reports.
+
+| Iter | Commit | Change (agent's description) | Compile | Validator v1.1 | Run-to-run | KL ratio | TKG p50 (n=2) |
+|---|---|---|---|---|---|---|---|
+| 1 | `e07beb4` | LNC half-swap after each AR on `gpsimd_dma` (SBUF→SBUF); residual add folded into the collective helper; MoE transpose and gather/rearrange copies dropped | OK | PASS | 64/64 | 0.961 | **10.082** |
+| 2 | `b3cdb3d` | + TP all-reduce → SBUF all-gather + rank-order fp32 local sum | OK | PASS | **0/64 (non-deterministic)** | 1.005 | 9.859 |
+
+- C2r: 2 iterations / 2 compiles / 0 compile failures; 2/2 pass; best eligible **10.082 ms** (iter 1); iter 2 (9.859) non-deterministic → reported separately, not eligible. First validated improvement 00:45 UTC = 2 h 09 min after start. Wall 22:35–03:03 UTC = 4 h 28 min (stopped early: a 3rd iteration, ~2–2.3 h each, could not finish by 04:36); idle 0; active 4 h 28 min; device time 4 h 20 min; 0 runtime-forced hand-backs; 0 guard-hook or other blocked calls (self-report; transcript has no "Blocked"/"denied"); 0 interventions.
+- Cross-run information: the transcript references only `~/runs/agents/c2r/`; no reads of other runs' records or branches. `~/runs/agents/c2/` permissions restored (755) after the run.
+- Agent's hypothesis for iter 2's nondeterminism (Hypothesis, untested): not a read-before-complete race in the trace; each partition row of the gather buffer is 64 B made of four 16 B per-rank slices, and concurrent sub-64 B writes into one SBUF line may leave a stale slice. Orchestrator note: the all-gather + local sum idea is now seen three times — C1 iter 1 (non-deterministic), C2 iter 1 (deterministic, cross-process bit-identical), C2r iter 2 (non-deterministic) — so its determinism depends on the buffer layout of each implementation, consistent with C1's iter 2 fix (dedicated per-stage gather buffers).
+- Profile (agent, Measured): iter 1 188.3 µs/layer, iter 2 183.3; iter 1 has 96 Mesh all-reduces of 4 KB, median 13.4 µs; iter 2's all-gathers median 10.6 µs; the `gpsimd_dma` LNC swap ≈ 1.45 µs per collective.
+
+**Eligible variants across all runs (pass v1.1 + 64/64 run-to-run; harness TKG p50, n=2):** C1 iter 2 `35309c3` **10.023** · C2 iter 2 `b092e45` 10.035 · A2 iter 4 `9767038` 10.060 · C2r iter 1 `e07beb4` 10.082 · A1 iter 3 `00b7b0b` 10.101. The spread is within the harness's n=2 noise (~±0.05 ms); C1 iter 2 is taken for the final bench by the rule "best eligible harness p50".
+
+**Final bench (started 03:04 UTC Nov 23, `tools/q3_final_chain.sh`):** (1) second teacher-forced capture of C1 iter 2 with the frozen `device.py` (cross-process run-to-run, `tools/r2r_rerun.sh c1 2`, pinned worktree `wt/c1_35309c3`); (2) V = C1 iter 2 compiled at 2048 and 4096 (`traced_V_q3final_s*`); (3) `tools/bench_q3_final.sh` interleaved B, C, V: 768 n=5, 2048 n=3, 4096 n=3. Caveat: the frozen validator runs at 768 only (`validate.py run` passes no `--seq-len`), so V at 2048/4096 is the same source and env as the validated 768 build, not a validated build — as for B and C's sweep builds in T8.
+
 ## 2026-11-22 17:36 ET — Q3 T4 run C2r (setup C restart) launched
 
 - Kevin (Nov 22): the credit outage is a tooling failure, not a setup effect. C2 is kept as a partial record; C2r restarts it from scratch.

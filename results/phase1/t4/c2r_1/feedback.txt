@@ -1,0 +1,48 @@
+COMPILE: OK (Compiling and tracing time: 955.9030551059986)
+VALIDATOR v1.1: PASS
+validator report rows:
+  op_boundary {"pass": null, "status": "not_measurable", "why": "no per-layer capture"}
+  router {"pass": null, "status": "not_measurable", "why": "no router capture"}
+  logits_tf {"pass": true, "kl_mean_cand": 0.0021723445327071628, "kl_mean_base": 0.002259803823545254, "kl_ratio": 0.9612978392518682, "top1_golden_cand": 0.9873347878456116, "top1_golden_base": 0.9865087866783142, "n_positions": 7264}
+  worst_pos {"pass": true, "max_kl": 0.8579641100649193, "base_kl_there": 0.028158669899198723, "gross_count": 0}
+  perplexity {"pass": true, "ppl_cand": 8.384853065332619, "ppl_base": 8.39334410426494, "ppl_golden": 8.342472201491121, "rel_delta": -0.0010116395594941263, "n_tokens": 8176}
+  run_to_run {"in_process": {"identical": 64, "n": 64, "differ": []}, "pass": true, "status": "bit_identical"}
+TKG p50: 10.082 ms (runs 10.085, 10.078)   (unmodified megakernel: ~10.29-10.36 ms in recent sessions)
+profile (least-skewed rank, bucket 128; us per layer; NTFF/NEFF in /home/ubuntu/runs/prof/p1_q3_t4_c2r_1_prof, instruction JSON /home/ubuntu/runs/agents/c2r/1/prof.json):
+phase                         wall   union  dma_us  dma_MB      n Tensor Vector Scalar GpSimd   Sync
+_total                       188.3
+moe.gate_up                   53.2    75.4    61.6  13.328   1750   66.8   13.3   14.9   40.7   70.6
+moe.down                      27.3    46.0    36.2   5.746    779   42.7    0.8    2.6   52.9    0.1
+idle                          25.2  (DMA active 10.0)
+    idle   7.26  mk.cc -> mk.cc
+    idle   6.75  xla.cc -> xla.cc
+    idle   2.25  attn.cc -> attn.cc
+    idle   1.97  attn.qkv -> attn.qkv
+    idle   1.57  moe.down -> moe.down
+    idle   1.03  moe.gate_up -> moe.gate_up
+    idle   0.94  mk.cc -> mk.body
+    idle   0.46  xla.ops -> xla.cc
+    idle   0.31  moe.gate_up -> moe.down
+    idle   0.30  xla.cc -> mk.cc
+    idle   0.25  attn.core -> attn.core
+    idle   0.25  xla.ops -> xla.ops
+    idle   0.24  attn.qkv -> xla.ops
+    idle   0.23  attn.cc -> attn.core
+    idle   0.21  moe.down -> moe.gate_up
+attn.qkv                      14.1    16.6    12.3   4.981    134    2.9   17.8    0.7    6.3    0.0
+attn.core                     10.9    16.6     4.4   0.591    117    4.5    7.3    7.3    4.0    5.8
+moe.router                     9.9    12.8     5.1   0.992    160    5.3   14.2    5.2    1.7    1.3
+xla.cc                         8.3     8.6     0.0   0.000     28    0.0    0.0    0.0    0.0    0.0
+xla.ops                        7.0    10.8    16.3   5.250    289   12.6    1.4    7.0   12.0    1.0
+attn.o_proj                    6.6     8.2     2.2   0.542    282   21.2    2.4    0.1    4.5    0.1
+moe.other                      6.4    12.2     7.2   1.102     86    0.0   11.7    2.7    4.6    0.0
+mk.body                        4.7     6.1     3.4   0.537     47    0.8    2.8    2.7    5.1    0.0
+attn.block_other               3.9     7.8     4.8   0.576     96    2.0    6.8    0.1    2.3    2.5
+attn.qk_norm                   3.3     6.0     4.3   0.624     49    2.1    3.0    1.4    3.0    0.1
+mk.cc                          2.2     2.3     0.0   0.000     17    0.0    0.0    0.0    0.0    0.0
+attn.kv_update                 1.7     3.3     1.4   0.221     17    0.1    0.1    0.4    3.5    0.0
+attn.cc                        1.6     1.8     0.0   0.000      7    0.0    0.0    0.0    0.0    0.0
+attn.mask_build                1.1     1.5     0.3   0.052      4    0.1    0.1    0.3    1.4    0.0
+attn.qk_rope                   1.0     1.8     1.4   0.131     21    0.0    3.2    0.0    0.0    0.0
+moe.cc                         0.0     0.1     0.0   0.000      0    0.0    0.0    0.0    0.0    0.0
+attn.rope_build                0.0     0.1     0.3   0.024      0    0.0    0.0    0.0    0.0    0.1

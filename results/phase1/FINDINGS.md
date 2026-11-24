@@ -2,6 +2,25 @@
 
 Queue: [`docs/queues/Q1Q2.md`](../../docs/queues/Q1Q2.md). State: [`QUEUE_STATE.md`](QUEUE_STATE.md). Ledger: `~/runs/ledger.jsonl` → [`ledger.jsonl`](ledger.jsonl). Times ET unless marked UTC. Q3 (Nov 19–27, [`docs/queues/Q3.md`](../../docs/queues/Q3.md)): newest Q3 entries directly below.
 
+## 2026-11-24 00:22 → 16:37 ET — Q4 T2: Eh at long context, interleaved B → C → V → Eh (Measured)
+
+`tools/q4_chain.sh t2_2048 t2_4096` → `tools/bench_q4.sh q4_t2 SEQ 3 B C V Eh` (separate processes, page cache pre-warmed before each run, rounds interleaved in one order); 24 runs, all `EXIT_STATUS=0`; stats `tools/bench_q4_stats.py` → `results/phase1/bench_q4_t2.json`. Eh builds: `traced_Eh_trn2_229_s{2048,4096}` compiled from `q3/t3-fusion` (`a66879a`, `ATTN_E_HOIST=1`), 1,105 / 1,437 s compile. TKG p50 (ms), mean ± std; deltas with (2 × pooled std; within-round paired mean ± std).
+
+| Seq | n | B | C | V | Eh | Eh − C | Eh − B | C − B | V − C |
+|---|---|---|---|---|---|---|---|---|---|
+| 768 (Q3 T3 session, Nov 19, n=5; no V) | 5 | 10.579 ± 0.129 | 10.373 ± 0.094 | – | 10.707 ± 0.086 | +0.335 (0.180) | +0.128 (0.218) | -0.206 (0.225) | – |
+| 2048 | 3 | 10.991 ± 0.141 | 10.392 ± 0.130 | 10.145 ± 0.145 | 10.792 ± 0.195 | +0.399 (0.331; paired +0.399 ± 0.065) | -0.199 (0.341; paired -0.199 ± 0.056) | -0.598 (0.272; paired -0.598 ± 0.021) | -0.247 (0.276; paired -0.247 ± 0.015) |
+| 4096 | 3 | 11.103 ± 0.015 | 10.383 ± 0.006 | 10.192 ± 0.075 | 10.739 ± 0.065 | +0.357 (0.093; paired +0.357 ± 0.071) | -0.363 (0.095; paired -0.363 ± 0.051) | -0.720 (0.023; paired -0.720 ± 0.021) | -0.191 (0.107; paired -0.191 ± 0.079) |
+
+p99 (ms) 2048 / 4096: B 11.547 / 11.720; C 10.857 / 10.834; V 10.613 / 10.682; Eh 11.264 / 11.265.
+
+- **Measured: Eh does not track C within 2 × pooled std at either length** (+0.399 vs 0.331 at 2048; +0.357 vs 0.093 at 4096), **and it does not fall further behind as length grows**: Eh − C is +0.335 / +0.399 / +0.357 ms at 768 / 2048 / 4096 (768 from another session), flat within its uncertainty (2048's 2σ is 0.33 because round 1 ran high for every config).
+- **Measured: the length-dependent part of C's gain over B is captured by the unfused Eh.** Eh − B goes +0.128 → −0.199 → −0.363 ms while C − B goes −0.206 → −0.598 → −0.720 ms. Of C's gain over B, Eh (no fusion) gets 33% at 2048 and 50% at 4096 (at 768 none: Eh is slower than B).
+- **Reading** (neither of the queue's two cases exactly): the gain that grows with context is the attention kernel — an unfused kernel gets it too. Fusion (plus the call boundary and the vendored MoE kernel, T3's residual ~7 µs/layer) is worth a roughly constant ~0.35–0.40 ms/step (≈3.4–3.8%) at every length; it does not grow at long context.
+- Measured: V − C −0.247 / −0.191 ms (> 2σ at 4096; at 2048 the paired deltas −0.23 / −0.26 / −0.26 are consistent but 2σ is 0.276); V − B −7.7 / −8.2%. Q3 final gave V − C −0.259 / −0.263.
+- Session effect: round 1 at 2048 (right after T4) ran +0.23–0.34 ms above rounds 2–3 for every config; within-round deltas are unaffected (paired std 0.015–0.065). 4096 is tight (std ≤ 0.075).
+- Measured (T4 follow-up, device idle): C and V at 2048 are **bit-identical on 7,264/7,264 teacher-forced positions** (`results/phase1/t4_s2048/C_vs_V.json`; max |Δlogit| 0.0).
+
 ## 2026-11-23 22:21 → 2026-11-24 00:22 ET — Q4 T4: frozen validator v1.1 on the 2048 builds (Measured)
 
 `tools/q4_chain.sh t4_2048`: frozen `device.py KIND CDIR OUT --tf --ppl --repeat --seq-len 2048` per build (no spec change), then `validate.py score` with XLA 2048 as the logits baseline (`--base-logits ~/runs/p1/val/xla_s2048_plain`), and a second score against the frozen 768 XLA baseline. Runs `p1_q4_t4_{xla,B,C,V}_s2048`, all `EXIT_STATUS=0`. XLA 2048 compiled here (`traced_xla_trn2_229_s2048_greedy`, 1,375 s compile; job 46 min); B, C = the T8 sweep builds, V = `traced_V_q3final_s2048` (`35309c3`, `MK_AGENT_VARIANT=1`). Reports copied to `results/phase1/t4_s2048/`.
@@ -15,7 +34,7 @@ Queue: [`docs/queues/Q1Q2.md`](../../docs/queues/Q1Q2.md). State: [`QUEUE_STATE.
 
 - **Measured: all four 2048 builds pass v1.1** (frozen_ok; op-boundary and router rows not measurable, as for every non-capture build). Verdicts and ratios do not depend on which XLA baseline is used (2048 vs 768 baseline KL 2.2588e-3 vs 2.2598e-3).
 - **Limit:** the corpus tops out at 768 tokens, so this validates the 2048-compiled kernels at positions < 768 only (7,264 teacher-forced positions; perplexity 16 × 512-token windows). Nothing beyond position 768 is checked.
-- Measured: C and V at 2048 have identical rows to every printed digit (KL 2.1786e-3, max KL 1.061, ppl 8.3827). Consistent with T5 (bit-identical on 62/64 prompts at 768); a direct bit-identity check is deferred until the device is idle so it does not share the host with the T2 benchmark.
+- Measured: C and V at 2048 have identical rows to every printed digit (KL 2.1786e-3, max KL 1.061, ppl 8.3827). Consistent with T5 (bit-identical on 62/64 prompts at 768); direct check after T2: bit-identical on 7,264/7,264 positions (`t4_s2048/C_vs_V.json`).
 - Measured: B's, C's and V's 2048 rows are close to their 768 rows (KL ratio B 0.856 vs 0.871, C/V 0.964 vs 0.961/0.960); C's worst position at 2048 reaches KL 1.061 (768: 0.858) with no top-1 change, so no gross position. ppl is identical to 768 for XLA and B to 4 digits (8.3933, 8.3790).
 - **4096 validation not run:** free disk after T4 is 22 GB of 678; T4 at 4096 needs ~19 GB (XLA 4096 build ~2.7 GB + 4 × 4.2 GB outputs) plus compile cache, which would leave < 5 GB for Q5. It needs a deletion first (`du` list to Kevin).
 

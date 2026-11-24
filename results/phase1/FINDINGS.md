@@ -2,6 +2,23 @@
 
 Queue: [`docs/queues/Q1Q2.md`](../../docs/queues/Q1Q2.md). State: [`QUEUE_STATE.md`](QUEUE_STATE.md). Ledger: `~/runs/ledger.jsonl` → [`ledger.jsonl`](ledger.jsonl). Times ET unless marked UTC. Q3 (Nov 19–27, [`docs/queues/Q3.md`](../../docs/queues/Q3.md)): newest Q3 entries directly below.
 
+## 2026-11-23 19:55 → 20:30 ET — Q4 T5: H2.4, all-reduce precision (C bf16 all-reduce vs V fp32 local sum)
+
+Device rows: frozen v1.1 reports (`reports_v11/nki.json` = C; `~/runs/p1/val/agent_c1_2/report.json` = V). Emulation: `tools/h24_allreduce.py` (H2.2 framework: CPU golden, everything fp32 except the per-layer o_proj and MoE-down TP=4 reductions; partials split along K as NxDI shards them, fp32 within each partial), run `p1_q4_h24` (19 min, 5.6 GiB peak RSS) → `results/phase1/h24.json`. Direct C-vs-V device comparison: `tools/r2r_compare.py` on the two teacher-forced captures → `results/phase1/h24_C_vs_V.json`.
+
+| | mean KL vs golden | KL ratio vs XLA | max KL | top-1 = golden | ppl | ρ per boundary (attn / moe / resid) | residual rel-L2 vs golden L0 / L24 / L47 |
+|---|---|---|---|---|---|---|---|
+| Device C (bf16 all-reduce) | 2.172e-3 | 0.961 | 0.858 | 98.733% | 8.385 | n/m (no capture build) | n/m |
+| Device V (all-gather + fp32 sum, one rounding) | 2.168e-3 | 0.960 | 0.858 | 98.733% | 8.384 | n/m | n/m |
+| Emulation fp32 (control) | 1.83e-06 | – | 0.0047 | 99.986% | – | – | 0.0000 / 0.0011 / 0.0041 |
+| Emulation ar_bf16 (partials bf16, bf16 rounding after each add, rank order) | 9.25e-04 | – | 0.8883 | 99.339% | – | – | 0.0040 / 0.0291 / 0.0400 |
+| Emulation ag_fp32 (partials bf16, fp32 sum, one rounding) | 6.49e-04 | – | 0.1619 | 99.422% | – | – | 0.0034 / 0.0243 / 0.0326 |
+
+- **Measured (emulation):** per-add bf16 rounding in the TP all-reduce costs +43% mean KL vs the fp32-sum variant (9.25e-04 vs 6.49e-04), raises the worst position's KL ~5× (0.888 vs 0.162), and residual error +17–24% at every depth. The fp32 control reproduces the golden (KL 1.8e-06).
+- **Measured (device):** C and V are **bit-identical on 62/64 prompts** (7,146 of 7,264 positions). The two that differ (p44 from decode step 64, p57 from step 34) diverge once and stay different for the rest of the prompt (contiguous to the end: one event carried by the KV cache); 0 top-1 changes, max |Δlogit| 3.25, mean KL(C‖V) 9.6e-06. Mean KL vs golden differs by 0.2% (C 2.172e-3, V 2.168e-3).
+- **Reading:** the device C-vs-V gap is ~200× smaller than the emulated bf16-per-add gap. Hypothesis: the trn2 collective's bf16 all-reduce does not round to bf16 after each add (it accumulates wider and rounds once, like V), so on this stack the all-reduce's precision is not a lever; the rare divergences would then be fp32 summation-order differences at a bf16 rounding boundary. Not tested on the device beyond these captures (a direct test would capture one layer's all-reduce output for C and V).
+- Limitations: ρ per boundary and router flips are not measurable for C or V (no capture build of the megakernel family); the emulation isolates the reduction only (o_proj and MoE-down partials in fp32, everything else fp32), so its absolute KL is not comparable with the device rows, only its ratios.
+
 ## 2026-11-23 18:40 → 19:55 ET — Q4 T3: V determinism, three more captures (Measured)
 
 `tools/q4_chain.sh t3`: three teacher-forced captures of V's 768 build (`agent_c1_2`, source `35309c3`, `MK_AGENT_VARIANT=1`) with the frozen `device.py --tf`, each in its own process (`p1_q4_t3_V_r2r{3,4,5}`, all `EXIT_STATUS=0`; load 817 / 1,113 / 1,192 s, wall 17 / 22 / 23 min). Each compared with `tools/r2r_compare.py` against capture 1 (the v1.1 run) and capture 2 (Nov 23 rerun).

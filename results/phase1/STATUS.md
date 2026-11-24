@@ -12,3 +12,4 @@
 - 2026-11-23 16:10 ET — Q3 done. V (C1 iter 2) 10.050 ms at 768: −1.7% vs C, −4.28% vs B (Gate 4 5% not met at 768; 7.61 / 8.57% at 2048 / 4096, unvalidatable builds). SUMMARY_Q3.md written; device idle; free disk 71 GB.
 - 2026-11-23 17:55 ET — Q4Q5 started; device idle; T1 (merge V with asserts) next.
 - 2026-11-23 18:45 ET — Q4 T1 done: V + asserts merged (a62b8af); outputs bit-identical to 35309c3's build 64/64. T3 captures running.
+- 2026-11-23 19:55 ET — Q4 T3 done: V bit-identical across 5 processes. T5 (H2.4 emulation) running, then Eh compiles, T4 at 2048, T2.

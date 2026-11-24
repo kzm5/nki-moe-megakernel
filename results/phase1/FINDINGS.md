@@ -2,6 +2,20 @@
 
 Queue: [`docs/queues/Q1Q2.md`](../../docs/queues/Q1Q2.md). State: [`QUEUE_STATE.md`](QUEUE_STATE.md). Ledger: `~/runs/ledger.jsonl` → [`ledger.jsonl`](ledger.jsonl). Times ET unless marked UTC. Q3 (Nov 19–27, [`docs/queues/Q3.md`](../../docs/queues/Q3.md)): newest Q3 entries directly below.
 
+## 2026-11-23 18:40 → 19:55 ET — Q4 T3: V determinism, three more captures (Measured)
+
+`tools/q4_chain.sh t3`: three teacher-forced captures of V's 768 build (`agent_c1_2`, source `35309c3`, `MK_AGENT_VARIANT=1`) with the frozen `device.py --tf`, each in its own process (`p1_q4_t3_V_r2r{3,4,5}`, all `EXIT_STATUS=0`; load 817 / 1,113 / 1,192 s, wall 17 / 22 / 23 min). Each compared with `tools/r2r_compare.py` against capture 1 (the v1.1 run) and capture 2 (Nov 23 rerun).
+
+| Capture | vs capture 1: positions differ / max abs Δlogit / top-1 changes | vs capture 2 |
+|---|---|---|
+| 3 | 0 of 7,264 / 0 / 0 | 0 / 0 / 0 |
+| 4 | 0 of 7,264 / 0 / 0 | 0 / 0 / 0 |
+| 5 | 0 of 7,264 / 0 / 0 | 0 / 0 / 0 |
+
+- **V is bit-identical across 5 separate processes** (plus the T1 rebuild with asserts, also identical). V stays eligible.
+- Tooling: the chain's bit-identity check exited 1 on a passing result (`sys.exit(0.0)` with a float), halting the chain after capture 3 at 00:00 UTC; fixed (`0b6aed1`) and restarted at 00:01 UTC; capture 3 was not rerun. ~1 min lost.
+- Ledger `git_sha` for these rows is the q1q2 worktree (validator), not the build source; the build is `35309c3`.
+
 ## 2026-11-23 17:52 → 18:45 ET — Q4 T1: V prepared and merged (Measured)
 
 Branch `q4/t1-merge-v` from `35309c3` (V = C1 iter 2), not from `q3/t4-c1`'s head `ede5298` (C1 iter 3 fails v1.1). Commit `3843abb` adds only two trace-time asserts in `transformer_qwen3_moe_speculative.py`: `TP_DEGREE >= 3` in `_sum_partials`, and `BxS == 1` at the top of the `_AG_REDUCE` block in `_multilayer_body` (covers every use). Run `p1_q4_t1_V768` (`tools/q4_t1.sh`): compile 931 s + frozen validator v1.1 in one process, load 2,113 s, wall 47 min, `EXIT_STATUS=0`; build `~/qwen-30b-a3b/traced_V_t1_s768`, outputs `~/runs/p1/val/V_t1_s768`.

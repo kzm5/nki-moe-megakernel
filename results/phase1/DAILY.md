@@ -38,3 +38,14 @@
 - Done: `SUMMARY_Q3.md`; 51 GB of superseded agent builds and their scoring dirs deleted (approved); free disk 71 GB.
 - Waiting on you: Gate 4's sequence length (V clears 5% only at 2048/4096); whether to merge V (`35309c3`, branch `q3/t4-c1`).
 - Blockers: none.
+
+## 2026-11-24 (Tue, 06:50 ET) — Q4 day 1
+- Done: **T1** V + trace-time asserts merged (`a62b8af`, gated `MK_AGENT_VARIANT=1`). NEFFs not byte-identical (every graph recompiled, HLO hashes changed); fallback met: outputs bit-identical to `35309c3`'s build 64/64 (7,264 positions, 16/16 ppl).
+- Done: **T3** V bit-identical across 5 separate processes (3 new captures, each = captures 1 and 2). V eligible.
+- Done: **T5** H2.4. Emulated bf16-per-add all-reduce +43% KL vs fp32 sum; on device C and V bit-identical on 62/64 prompts (KL −0.2%) → Hypothesis: trn2's bf16 all-reduce does not round per add; all-reduce precision is not a lever here.
+- Done: **T4 at 2048** — XLA (compiled), B, C, V all pass frozen v1.1 at `--seq-len 2048` (positions < 768 only; corpus limit). C and V rows identical.
+- Interim **T2 at 2048 (n=3):** B 10.991, C 10.392, V 10.145, Eh 10.792 ms. Eh − C +0.399 (> 2σ 0.331), Eh − B −0.199 (< 2σ 0.341; all 3 rounds negative). At 768 Eh − C was +0.335, Eh − B +0.128. Round 1 high for all configs (+0.23–0.34 ms; session effect after T4), so within-round deltas are also reported.
+- In progress: T2 at 4096 (12 runs, ~7 h). Then Q4 wrap-up; Q5 T6 starts after (well before Thu 12:00).
+- Tooling: chain's bit-identity check exited 1 on a passing T3 result (float `sys.exit`); fixed, ~1 min lost.
+- Waiting on you: T4 at 4096 needs ~19 GB; free disk is 22 GB. Run it only with a deletion — I'll send a `du` list if you want it.
+- Blockers: none. trn3 day shelved (noted).

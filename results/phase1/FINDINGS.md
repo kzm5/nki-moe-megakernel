@@ -2,6 +2,23 @@
 
 Queue: [`docs/queues/Q1Q2.md`](../../docs/queues/Q1Q2.md). State: [`QUEUE_STATE.md`](QUEUE_STATE.md). Ledger: `~/runs/ledger.jsonl` → [`ledger.jsonl`](ledger.jsonl). Times ET unless marked UTC. Q3 (Nov 19–27, [`docs/queues/Q3.md`](../../docs/queues/Q3.md)): newest Q3 entries directly below.
 
+## 2026-11-23 22:21 → 2026-11-24 00:22 ET — Q4 T4: frozen validator v1.1 on the 2048 builds (Measured)
+
+`tools/q4_chain.sh t4_2048`: frozen `device.py KIND CDIR OUT --tf --ppl --repeat --seq-len 2048` per build (no spec change), then `validate.py score` with XLA 2048 as the logits baseline (`--base-logits ~/runs/p1/val/xla_s2048_plain`), and a second score against the frozen 768 XLA baseline. Runs `p1_q4_t4_{xla,B,C,V}_s2048`, all `EXIT_STATUS=0`. XLA 2048 compiled here (`traced_xla_trn2_229_s2048_greedy`, 1,375 s compile; job 46 min); B, C = the T8 sweep builds, V = `traced_V_q3final_s2048` (`35309c3`, `MK_AGENT_VARIANT=1`). Reports copied to `results/phase1/t4_s2048/`.
+
+| Build at 2048 | v1.1 | mean KL vs golden | KL ratio vs XLA 2048 | KL ratio vs XLA 768 | top-1 = golden | worst pos max KL / gross | ppl | run-to-run (in-process) |
+|---|---|---|---|---|---|---|---|---|
+| XLA | PASS | 2.2588e-03 | 1.0000 | 0.9996 | 98.747% | 0.833 / 0 | 8.3933 | 64/64 |
+| B lib MoE | PASS | 1.9331e-03 | 0.8558 | 0.8554 | 98.678% | 0.564 / 0 | 8.3790 | 64/64 |
+| C megakernel | PASS | 2.1786e-03 | 0.9645 | 0.9641 | 98.789% | 1.061 / 0 | 8.3827 | 64/64 |
+| V (C1 iter 2) | PASS | 2.1786e-03 | 0.9645 | 0.9641 | 98.789% | 1.061 / 0 | 8.3827 | 64/64 |
+
+- **Measured: all four 2048 builds pass v1.1** (frozen_ok; op-boundary and router rows not measurable, as for every non-capture build). Verdicts and ratios do not depend on which XLA baseline is used (2048 vs 768 baseline KL 2.2588e-3 vs 2.2598e-3).
+- **Limit:** the corpus tops out at 768 tokens, so this validates the 2048-compiled kernels at positions < 768 only (7,264 teacher-forced positions; perplexity 16 × 512-token windows). Nothing beyond position 768 is checked.
+- Measured: C and V at 2048 have identical rows to every printed digit (KL 2.1786e-3, max KL 1.061, ppl 8.3827). Consistent with T5 (bit-identical on 62/64 prompts at 768); a direct bit-identity check is deferred until the device is idle so it does not share the host with the T2 benchmark.
+- Measured: B's, C's and V's 2048 rows are close to their 768 rows (KL ratio B 0.856 vs 0.871, C/V 0.964 vs 0.961/0.960); C's worst position at 2048 reaches KL 1.061 (768: 0.858) with no top-1 change, so no gross position. ppl is identical to 768 for XLA and B to 4 digits (8.3933, 8.3790).
+- **4096 validation not run:** free disk after T4 is 22 GB of 678; T4 at 4096 needs ~19 GB (XLA 4096 build ~2.7 GB + 4 × 4.2 GB outputs) plus compile cache, which would leave < 5 GB for Q5. It needs a deletion first (`du` list to Kevin).
+
 ## 2026-11-23 19:55 → 20:30 ET — Q4 T5: H2.4, all-reduce precision (C bf16 all-reduce vs V fp32 local sum)
 
 Device rows: frozen v1.1 reports (`reports_v11/nki.json` = C; `~/runs/p1/val/agent_c1_2/report.json` = V). Emulation: `tools/h24_allreduce.py` (H2.2 framework: CPU golden, everything fp32 except the per-layer o_proj and MoE-down TP=4 reductions; partials split along K as NxDI shards them, fp32 within each partial), run `p1_q4_h24` (19 min, 5.6 GiB peak RSS) → `results/phase1/h24.json`. Direct C-vs-V device comparison: `tools/r2r_compare.py` on the two teacher-forced captures → `results/phase1/h24_C_vs_V.json`.

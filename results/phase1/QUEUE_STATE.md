@@ -78,8 +78,8 @@ Updated: 2026-11-23 18:30 ET. Deadlines (ET): Q4 Thu Nov 26 12:00; Q5 Sun Nov 29
 | T1 prepare V for merge | done Nov 23 18:45: NEFF not byte-identical (HLO hashes changed); outputs bit-identical 64/64 (7,264 positions, 16/16 ppl); **merged `a62b8af`** | branch `q4/t1-merge-v` (`3843abb`), `tools/q4_t1.sh`, `t4/V_t1_vs_c1_2.json` |
 | T2 Eh at 2048/4096 | pending | – |
 | T3 V determinism (3 captures) | done Nov 23 19:55: captures 3–5 bit-identical to captures 1 and 2 (7,264/7,264 each); V eligible | `results/phase1/t4/c1_2_r2r{3,4,5}*.json` |
-| (chain) | running Eh compiles → T4 2048 → T2 2048/4096 | `tools/q4_chain.sh`, log `~/runs/p1/q4_chain.log` |
-| T4 validate 2048 builds | pending | – |
+| (chain) | Eh 2048/4096 compiled (49 / 77 min); running T2 bench 2048 then 4096 (24 runs) | `tools/q4_chain.sh`, log `~/runs/p1/q4_chain.log` |
+| T4 validate 2048 builds | 2048 done Nov 24 00:22: XLA, B, C, V all PASS v1.1 (positions < 768 only); 4096 not run (disk: needs a deletion) | `results/phase1/t4_s2048/`, `~/runs/p1/val/*_s2048_plain` |
 | T5 H2.4 all-reduce precision | done Nov 23 20:30: emulated bf16-per-add AR +43% KL vs fp32 sum; on device C and V bit-identical on 62/64 prompts (KL −0.2%) | `tools/h24_allreduce.py`, `h24.json`, `h24_C_vs_V.json`, FINDINGS T5 |
 | T6 final interleaved session | pending (Q5) | – |
 | T7 tables and figures | pending (Q5) | – |

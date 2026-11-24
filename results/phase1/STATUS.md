@@ -14,3 +14,4 @@
 - 2026-11-23 18:45 ET — Q4 T1 done: V + asserts merged (a62b8af); outputs bit-identical to 35309c3's build 64/64. T3 captures running.
 - 2026-11-23 19:55 ET — Q4 T3 done: V bit-identical across 5 processes. T5 (H2.4 emulation) running, then Eh compiles, T4 at 2048, T2.
 - 2026-11-23 20:30 ET — Q4 T5 done (emulated bf16 AR +43% KL vs fp32 sum; device C ≈ V, bit-identical 62/64 prompts). Eh 2048 compile running.
+- 2026-11-24 00:25 ET — Q4 T4 (2048) done: XLA/B/C/V all pass v1.1 at --seq-len 2048 (positions < 768). Eh compiled at 2048/4096; T2 bench running (~18 h). Disk 22 GB free.

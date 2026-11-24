@@ -1,0 +1,119 @@
+{
+ "cand": "/home/ubuntu/runs/p1/val_long/B_s2048",
+ "base": "/home/ubuntu/runs/p1/val_long/B_s2048",
+ "base_logits": "/home/ubuntu/runs/p1/val_long/xla_s2048",
+ "cand_device": {
+  "kind": "libmoe",
+  "cdir": "/home/ubuntu/qwen-30b-a3b/traced_libmoe_trn2_229_s2048_greedy_sweep",
+  "capture": false,
+  "mutant": ""
+ },
+ "pass": true,
+ "rows_failed": [],
+ "rows_not_measurable": [
+  "op_boundary",
+  "router"
+ ],
+ "spec_version": "1.1",
+ "rows": {
+  "op_boundary": {
+   "pass": null,
+   "status": "not_measurable",
+   "why": "no per-layer capture"
+  },
+  "router": {
+   "pass": null,
+   "status": "not_measurable",
+   "why": "no router capture"
+  },
+  "logits_tf": {
+   "pass": true,
+   "kl_mean_cand": 0.003601749476477492,
+   "kl_mean_base": 0.0045944846693000314,
+   "kl_ratio": 0.783928935609272,
+   "top1_golden_cand": 0.97265625,
+   "top1_golden_base": 0.9775390625,
+   "n_positions": 1024
+  },
+  "worst_pos": {
+   "pass": true,
+   "max_kl": 0.35312097947415466,
+   "max_kl_at": [
+    "q01",
+    3
+   ],
+   "base_kl_there": 0.28979762325221736,
+   "gross_count": 0,
+   "gross_at": [],
+   "kl_hist_edges": [
+    0.001,
+    0.01,
+    0.05,
+    0.2,
+    1.0
+   ],
+   "kl_hist_cand": [
+    647,
+    307,
+    57,
+    12,
+    1,
+    0
+   ]
+  },
+  "perplexity": {
+   "pass": true,
+   "ppl_cand": 9.235503676614929,
+   "ppl_base": 9.248412633825241,
+   "ppl_golden": 9.229601976243387,
+   "rel_delta": -0.0013958024713450756,
+   "n_tokens": 7676
+  },
+  "run_to_run": {
+   "in_process": {
+    "identical": 16,
+    "n": 16,
+    "differ": []
+   },
+   "pass": true,
+   "status": "bit_identical"
+  }
+ },
+ "thresholds": {
+  "rho_median_max": 1.25,
+  "rho_layer_max": 2.0,
+  "router_pp_max": 0.5,
+  "kl_ratio_max": 1.25,
+  "gross_kl": 0.2,
+  "base_clean_kl": 0.01,
+  "ppl_rel_max": 0.005,
+  "gross_requires_top1_change": true
+ },
+ "hashes": {
+  "validator": {
+   "validate.py": "a03e3ab14b8282ac4ed102af26f06ac14aceec1588a30a6eed6014588a1ed31f",
+   "device.py": "e26dbb468a96b7bf992343a6bd043a8cbacf57907c1f29673b7a93dbc3e3379c",
+   "golden.py": "5e2d0aecdcc8b2295315973183ebec8ccf0684b340adc7425b5fed4d40c72ae5",
+   "mutants.py": "f4481b6f6a7f66c48b0b0559a60a577476d556338477b46fbf3f4fe09bc0c6f0",
+   "corpus.py": "ec6634b67798c030d9e4d116c7b9bfd3f07c7bff3c6fe564a14fbaf9aeeb0773"
+  },
+  "spec": "b8fa47b2e9f8b0843091afcebba1a905a3f30f4abba52e22b39166b0fe612d30",
+  "spec_file": "spec_v1.1.json",
+  "corpus": "a15eee9f71bfa0f8afa68bc202e6609cb060ac5bf2c3d5bef71369d7acb2cf9d",
+  "golden_manifest": "700af57dd0ddb123cef94f44055e52e1cca33324fb0ad599358c006e68fd707c",
+  "refs_manifest": "79469a020e5f31b6d46eb1e6089bcc6cee2f9a586348055fd039b3dcf3b68ce2",
+  "n_golden_files": 21,
+  "n_refs": 16
+ },
+ "frozen_ok": false,
+ "scored_utc": "2026-11-24T23:05:36Z",
+ "frozen_long_ok": true,
+ "wrapper": {
+  "file": "/home/ubuntu/nki-moe-megakernel/tools/validate_long.py",
+  "frozen_dir": "/home/ubuntu/nki-moe-megakernel/.claude/worktrees/q1q2/tools/validator",
+  "CORPUS": "/home/ubuntu/nki-moe-megakernel/tools/../results/phase1/corpus_long/corpus.json",
+  "GOLDEN": "/home/ubuntu/runs/p1/golden_long2048",
+  "REFS": "/home/ubuntu/runs/p1/refs_long2048"
+ },
+ "supplementary": "long-context corpus (results/phase1/corpus_long); not the v1 validator corpus"
+}

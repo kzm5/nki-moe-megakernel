@@ -1,0 +1,7 @@
+{
+ "corpus": "a15eee9f71bfa0f8afa68bc202e6609cb060ac5bf2c3d5bef71369d7acb2cf9d",
+ "golden_manifest": "700af57dd0ddb123cef94f44055e52e1cca33324fb0ad599358c006e68fd707c",
+ "refs_manifest": "79469a020e5f31b6d46eb1e6089bcc6cee2f9a586348055fd039b3dcf3b68ce2",
+ "n_golden_files": 21,
+ "n_refs": 16
+}

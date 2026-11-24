@@ -1,0 +1,126 @@
+{
+ "tf": {
+  "tf_p00.pt": {
+   "positions_differ": 0,
+   "first": null,
+   "max_abs": 0.0,
+   "top1_changes": 0
+  },
+  "tf_p01.pt": {
+   "positions_differ": 0,
+   "first": null,
+   "max_abs": 0.0,
+   "top1_changes": 0
+  },
+  "tf_p02.pt": {
+   "positions_differ": 0,
+   "first": null,
+   "max_abs": 0.0,
+   "top1_changes": 0
+  },
+  "tf_p03.pt": {
+   "positions_differ": 0,
+   "first": null,
+   "max_abs": 0.0,
+   "top1_changes": 0
+  },
+  "tf_p04.pt": {
+   "positions_differ": 0,
+   "first": null,
+   "max_abs": 0.0,
+   "top1_changes": 0
+  },
+  "tf_p05.pt": {
+   "positions_differ": 0,
+   "first": null,
+   "max_abs": 0.0,
+   "top1_changes": 0
+  },
+  "tf_p06.pt": {
+   "positions_differ": 0,
+   "first": null,
+   "max_abs": 0.0,
+   "top1_changes": 0
+  },
+  "tf_p07.pt": {
+   "positions_differ": 0,
+   "first": null,
+   "max_abs": 0.0,
+   "top1_changes": 0
+  },
+  "tf_p08.pt": {
+   "positions_differ": 0,
+   "first": null,
+   "max_abs": 0.0,
+   "top1_changes": 0
+  },
+  "tf_p09.pt": {
+   "positions_differ": 0,
+   "first": null,
+   "max_abs": 0.0,
+   "top1_changes": 0
+  },
+  "tf_p10.pt": {
+   "positions_differ": 0,
+   "first": null,
+   "max_abs": 0.0,
+   "top1_changes": 0
+  },
+  "tf_p11.pt": {
+   "positions_differ": 0,
+   "first": null,
+   "max_abs": 0.0,
+   "top1_changes": 0
+  },
+  "tf_p12.pt": {
+   "positions_differ": 0,
+   "first": null,
+   "max_abs": 0.0,
+   "top1_changes": 0
+  },
+  "tf_p13.pt": {
+   "positions_differ": 0,
+   "first": null,
+   "max_abs": 0.0,
+   "top1_changes": 0
+  },
+  "tf_p14.pt": {
+   "positions_differ": 0,
+   "first": null,
+   "max_abs": 0.0,
+   "top1_changes": 0
+  },
+  "tf_p15.pt": {
+   "positions_differ": 0,
+   "first": null,
+   "max_abs": 0.0,
+   "top1_changes": 0
+  }
+ },
+ "ppl": {
+  "ppl_w00.pt": {
+   "tokens_differ": 566,
+   "of": 1919,
+   "first": 1353,
+   "argmax_changes": 3
+  },
+  "ppl_w01.pt": {
+   "tokens_differ": 0,
+   "of": 1919,
+   "first": null,
+   "argmax_changes": 0
+  },
+  "ppl_w02.pt": {
+   "tokens_differ": 0,
+   "of": 1919,
+   "first": null,
+   "argmax_changes": 0
+  },
+  "ppl_w03.pt": {
+   "tokens_differ": 0,
+   "of": 1919,
+   "first": null,
+   "argmax_changes": 0
+  }
+ }
+}

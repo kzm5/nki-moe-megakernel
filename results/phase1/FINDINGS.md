@@ -2,6 +2,24 @@
 
 Queue: [`docs/queues/Q1Q2.md`](../../docs/queues/Q1Q2.md). State: [`QUEUE_STATE.md`](QUEUE_STATE.md). Ledger: `~/runs/ledger.jsonl` → [`ledger.jsonl`](ledger.jsonl). Times ET unless marked UTC. Q3 (Nov 19–27, [`docs/queues/Q3.md`](../../docs/queues/Q3.md)): newest Q3 entries directly below.
 
+## 2026-11-24 16:57 → 18:10 ET — Q4b T9: supplementary long-context validation at 2048 (Measured)
+
+Supplementary corpus `results/phase1/corpus_long/corpus.json` (`tools/corpus_long.py`, deterministic): 16 prompts q00–q15 with prompt lengths 1,400–1,895 tokens (evenly spread), 64 new tokens each (total ≤ 1,959): 8 plain continuations and 4 instruction prompts (summary / key facts / entities) on wikitext-2 test articles the v1 corpus does not use (CC BY-SA 3.0; a TV episode, a road, a typhoon season, a city, a synagogue, a film, warships, poetry, baseball, Nero, a piano technique, a battleship class), 4 continuations of CPython 3.12 stdlib source (heapq, string, fractions, textwrap; PSF-2.0); perplexity 4 × 1,920-token passages (7,676 scored tokens). Frozen separately: `FROZEN_long.md`, `frozen_long.json`; v1 corpus and spec unchanged.
+
+Pipeline (`tools/q4b_t9.sh`, frozen modules unchanged): XLA 2048 references with frozen `device.py --free all` + tf + ppl + repeat in one process (19 min); fp32 golden with frozen `golden.py` (CPU, 8.7 min, 13.0 GiB); B, C, V captures with frozen `device.py --tf --ppl --repeat --seq-len 2048` (7 / 20 / 23 min); scoring with `tools/validate_long.py` (frozen `validate.score` with the corpus, golden and refs paths repointed; XLA 2048 as logits baseline). All runs `EXIT_STATUS=0`, in the ledger as `p1_q4b_t9_*`. Reports: `results/phase1/corpus_long/reports/`.
+
+| Build at 2048 (long corpus) | v1.1 rows | mean KL vs golden | KL ratio vs XLA | top-1 = golden | worst pos max KL / gross | ppl (vs XLA) | run-to-run |
+|---|---|---|---|---|---|---|---|
+| XLA | PASS | 4.5945e-03 | 1.0000 | 97.75% | 0.846 / 0 | 9.2484 (+0.0000%) | 16/16 |
+| B lib MoE | PASS | 3.6017e-03 | 0.7839 | 97.27% | 0.353 / 0 | 9.2355 (-0.1396%) | 16/16 |
+| C megakernel | PASS | 3.8368e-03 | 0.8351 | 97.56% | 0.246 / 0 | 9.2488 (+0.0047%) | 16/16 |
+| V (C1 iter 2) | PASS | 3.8368e-03 | 0.8351 | 97.56% | 0.246 / 0 | 9.2481 (-0.0031%) | 16/16 |
+
+- **Measured: supplementary long-context validation — XLA, B, C and V all pass the v1.1 rows** on 1,024 teacher-forced positions at absolute positions 1,400–1,958 and 7,676 perplexity tokens at positions up to 1,919, with frozen_long_ok. This covers the long positions the v1 corpus (≤ 768) cannot reach. Supplementary: not the frozen v1 validator result.
+- Measured: errors vs golden are about twice the v1 corpus's for every build (XLA mean KL 4.59e-3 vs 2.26e-3), and the NKI builds' advantage over XLA is larger here (KL ratio B 0.784, C/V 0.835 vs 0.856 / 0.964 at 2048 on the v1 corpus). Ordering unchanged: B most accurate, then C = V, then XLA.
+- Measured: C and V are bit-identical on all 16 prompts (`corpus_long/reports/C_vs_V.json`); in the perplexity passages one divergence event (w00 from token 1,353 to the end, 566 of 1,919 NLLs differ, 3 argmax changes), the other 3 passages identical — the same single-event pattern as at 768 (T5).
+- Limits: 16 prompts (n small; the worst position is q01 for XLA and C/V); 2048 builds only (4096 not validated on this corpus); op-boundary and router rows not measurable (no capture builds).
+
 ## 2026-11-24 00:22 → 16:37 ET — Q4 T2: Eh at long context, interleaved B → C → V → Eh (Measured)
 
 `tools/q4_chain.sh t2_2048 t2_4096` → `tools/bench_q4.sh q4_t2 SEQ 3 B C V Eh` (separate processes, page cache pre-warmed before each run, rounds interleaved in one order); 24 runs, all `EXIT_STATUS=0`; stats `tools/bench_q4_stats.py` → `results/phase1/bench_q4_t2.json`. Eh builds: `traced_Eh_trn2_229_s{2048,4096}` compiled from `q3/t3-fusion` (`a66879a`, `ATTN_E_HOIST=1`), 1,105 / 1,437 s compile. TKG p50 (ms), mean ± std; deltas with (2 × pooled std; within-round paired mean ± std).

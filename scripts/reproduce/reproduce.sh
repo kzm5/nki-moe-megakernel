@@ -70,6 +70,7 @@ build)
   done; done ;;
 validate)
   lock
+  mkdir -p "$OUT_ROOT/validate"
   for s in $LENGTHS; do
     list=" $CONFIGS "; list=${list// A / }  # XLA (A) first: it is the logits baseline at lengths other than 768
     if [ "$s" != 768 ] || [[ " $CONFIGS " == *" A "* ]]; then list="A $list"; fi
@@ -83,6 +84,7 @@ validate)
       env MK_DIR="$src" $env "$PY" "$FZ/device.py" "$kind" "$d" "$o" --corpus "$CORPUS" --refs "$P1/refs" \
         --tf --ppl --repeat --seq-len "$s" > "$o.log" 2>&1
     fi
+    [ -f "$o/device.json" ] || { log "validate $c s$s: capture FAILED (see $o.log)"; continue; }
     base=$P1/val/xla_plain; [ "$s" != 768 ] && base=$OUT_ROOT/validate/A_s$s
     "$PY" "$FZ/validate.py" score --cand "$o" --base-logits "$base" --out "$o/report.json" > "$o.score.log" 2>&1
     log "validate $c s$s: $(grep '^VALIDATE' "$o.score.log" | cut -c10-200)"

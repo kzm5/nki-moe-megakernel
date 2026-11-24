@@ -27,7 +27,7 @@ t3() {  # three more teacher-forced captures of V at 768, each vs the first two
     $PY $T/r2r_compare.py $V/agent_c1_2_rerun $out --out $V/agent_c1_2_r2r${k}_vs2.json >> $L 2>&1
     log "end $name $(st $name)"
     for j in $V/agent_c1_2_r2r$k.json $V/agent_c1_2_r2r${k}_vs2.json; do
-      $PY -c "import json,sys; d=json.load(open('$j')); sys.exit(d['n_positions'] != 7264 or d['positions_differ'] or d['max_abs_logit_diff'])" \
+      $PY -c "import json,sys; d=json.load(open('$j')); sys.exit(int(bool(d['n_positions'] != 7264 or d['positions_differ'] or d['max_abs_logit_diff'])))" \
         || { log "T3 STOP: $j not bit-identical (or missing)"; touch ~/runs/p1/q4_STOP; exit 1; }
     done
   done

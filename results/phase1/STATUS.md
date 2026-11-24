@@ -17,3 +17,4 @@
 - 2026-11-24 00:25 ET — Q4 T4 (2048) done: XLA/B/C/V all pass v1.1 at --seq-len 2048 (positions < 768). Eh compiled at 2048/4096; T2 bench running (~18 h). Disk 22 GB free.
 - 2026-11-24 06:50 ET — Q4: T1/T3/T4(2048)/T5 done; T2 2048 done (Eh − C +0.40 ms, Eh − B −0.20 ms); T2 4096 running. DAILY written.
 - 2026-11-24 16:50 ET — Q4 done. T2: Eh − C ≈ +0.36–0.40 ms at every length (does not grow); Eh beats B at 2048/4096 (attention). C = V bit-identical at 2048. Q5 T6 final session started (~30 h).
+- 2026-11-24 17:10 ET — Q4b added: T6 stopped (no data lost); T9 long-context corpus started. **Waiting on Kevin:** deletion approval for T10 (`results/phase1/deletion_candidates_q4b.md`, Tier 1 = 22.8 GB).

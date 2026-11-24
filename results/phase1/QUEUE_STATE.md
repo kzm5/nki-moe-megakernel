@@ -66,7 +66,7 @@ Updated: 2026-11-23 16:10 ET. **Q3 done** (all tasks; `SUMMARY_Q3.md`), ahead of
 
 # Q4Q5 queue state (queue: `docs/queues/Q4Q5.md`, read-only; Nov 24–29)
 
-Updated: 2026-11-24 16:50 ET. **Q4 done** (T4 at 4096 not run: needs a deletion). Q5 T6 running. Deadlines (ET): Q4 Thu Nov 26 12:00; Q5 Sun Nov 29 18:00. trn3 day shelved (Kevin, Nov 23; queue `f6176a8`): no T1 merge deadline, no trn3 work.
+Updated: 2026-11-24 16:50 ET. **Q4 done** (T4 at 4096 not run: needs a deletion). Q4b added by Kevin (Nov 24, `1bead66`): runs before Q5 (Q5 starts by Fri Nov 27 12:00). T6 stopped at its first load (aborted, no data). Deadlines (ET): Q4 Thu Nov 26 12:00; Q5 Sun Nov 29 18:00. trn3 day shelved (Kevin, Nov 23; queue `f6176a8`): no T1 merge deadline, no trn3 work.
 
 ## Environment
 - Results in the main checkout (`phase0/trn2-setup`); kernel work in worktree `.claude/worktrees/q4/t1` (branch `q4/t1-merge-v`). Frozen validator still run from the q1q2 worktree.
@@ -81,6 +81,9 @@ Updated: 2026-11-24 16:50 ET. **Q4 done** (T4 at 4096 not run: needs a deletion)
 | (chain) | done Nov 24 16:37 (`CHAIN_DONE`) | `tools/q4_chain.sh`, log `~/runs/p1/q4_chain.log` |
 | T4 validate 2048 builds | 2048 done Nov 24 00:22: XLA, B, C, V all PASS v1.1 (positions < 768 only); 4096 not run (disk: needs a deletion) | `results/phase1/t4_s2048/`, `~/runs/p1/val/*_s2048_plain` |
 | T5 H2.4 all-reduce precision | done Nov 23 20:30: emulated bf16-per-add AR +43% KL vs fp32 sum; on device C and V bit-identical on 62/64 prompts (KL −0.2%) | `tools/h24_allreduce.py`, `h24.json`, `h24_C_vs_V.json`, FINDINGS T5 |
-| T6 final interleaved session | running since Nov 24 16:40 ET: 768 n=5 A B C E Eh V, then 2048/4096 n=3 B C V Eh (54 runs, ~30 h) | `tools/q5_t6.sh`, log `~/runs/p1/bench_q5_t6.log` |
+| T9 long-context corpus (Q4b, 10 h box) | in progress | – |
+| T10 8192 sweep (Q4b, 10 h box) | pending: needs disk (`deletion_candidates_q4b.md`, awaiting Kevin) | – |
+| T11 reproducibility package (Q4b, 6 h box) | pending | – |
+| T6 final interleaved session | pending (after Q4b): started early Nov 24 16:40, stopped 16:57 during the first load (Q4b added) | `tools/q5_t6.sh` |
 | T7 tables and figures | pending (Q5) | – |
 | T8 freeze | pending (Q5) | – |

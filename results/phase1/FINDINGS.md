@@ -2,6 +2,13 @@
 
 Queue: [`docs/queues/Q1Q2.md`](../../docs/queues/Q1Q2.md). State: [`QUEUE_STATE.md`](QUEUE_STATE.md). Ledger: `~/runs/ledger.jsonl` → [`ledger.jsonl`](ledger.jsonl). Times ET unless marked UTC. Q3 (Nov 19–27, [`docs/queues/Q3.md`](../../docs/queues/Q3.md)): newest Q3 entries directly below.
 
+## 2026-11-24 18:15 → 2026-11-26 11:50 ET — Q4b: idle wait, approved deletions, T10 started, T11 proof (bench) (Measured)
+
+- **Idle 41 h (Nov 24 18:15 → Nov 26 11:38 ET):** the session waited on the deletion question for T10 with the device idle. The T11 `validate` proof (no approval needed) could have run in that window and did not; T6 could not start (Q4b first). Q4 itself finished Nov 24 16:50, before its Thu 12:00 deadline.
+- **Deletions (Kevin, Nov 26: Tier 1 + Tier 2 of `deletion_candidates_q4b.md`):** 52.3 GB, every item logged in `~/runs/deletions.log`. Tier 2 items were checked first (report committed in `t4/reports/agent_<run>.json` and the build's commit an ancestor of `mine/q3/t4-<run>`): a1_3 `00b7b0b`, a2_4 `9767038`, base_1 `7fd70dc`, c2_2 `b092e45`, c2r_1 `e07beb4` — all passed, none skipped. Free disk 16 → 67 GB.
+- **T10 started 11:45 ET** (`tools/q4b_t10.sh B C V`; box to ~21:45 ET): B, C, V compiled at 8192, then bench B → C → V n=3. Eh not attempted: its compile (~1.5 h) plus 3 bench runs would not fit the box.
+- **T11 proof, bench (Nov 24 23:08–23:17 UTC, clean detached worktree at `59b909a`, `~/runs/repro_proof_config.sh`):** `reproduce.sh bench` for B at 768, n=1, existing build → TKG p50 **10.701 ms** vs the ledger's B@768 10.524 ± 0.088 (n=18): **+0.178 ms**, about 2 ledger std. Hypothesis: within the day-to-day drift seen before (B 10.49–10.58 ms in earlier sessions, +0.23–0.34 ms first-round effect in Q4 T2); n=1 cannot separate it. The `validate` step failed silently (its output dir was never created); fixed (`c2becba`), rerun pending.
+
 ## 2026-11-24 16:57 → 18:10 ET — Q4b T9: supplementary long-context validation at 2048 (Measured)
 
 Supplementary corpus `results/phase1/corpus_long/corpus.json` (`tools/corpus_long.py`, deterministic): 16 prompts q00–q15 with prompt lengths 1,400–1,895 tokens (evenly spread), 64 new tokens each (total ≤ 1,959): 8 plain continuations and 4 instruction prompts (summary / key facts / entities) on wikitext-2 test articles the v1 corpus does not use (CC BY-SA 3.0; a TV episode, a road, a typhoon season, a city, a synagogue, a film, warships, poetry, baseball, Nero, a piano technique, a battleship class), 4 continuations of CPython 3.12 stdlib source (heapq, string, fractions, textwrap; PSF-2.0); perplexity 4 × 1,920-token passages (7,676 scored tokens). Frozen separately: `FROZEN_long.md`, `frozen_long.json`; v1 corpus and spec unchanged.

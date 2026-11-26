@@ -49,3 +49,11 @@
 - Tooling: chain's bit-identity check exited 1 on a passing T3 result (float `sys.exit`); fixed, ~1 min lost.
 - Waiting on you: T4 at 4096 needs ~19 GB; free disk is 22 GB. Run it only with a deletion — I'll send a `du` list if you want it.
 - Blockers: none. trn3 day shelved (noted).
+
+## 2026-11-26 (Thu, 11:50 ET) — Q4b (no note Nov 25: session idle)
+- Done Nov 24: Q4 (T1–T5, T4 at 2048); Q4b T9 supplementary long-context validation — XLA, B, C, V pass the v1.1 rows at 2048 on 16 prompts of 1,400–1,895 tokens; C = V bit-identical on 16/16 prompts.
+- Done Nov 24: T11 package (`scripts/reproduce/`, `docs/REPRODUCE.md`); proof bench B@768 10.701 ms vs ledger 10.524 ± 0.088 (+0.18 ms, n=1).
+- Idle Nov 24 18:15 → Nov 26 11:38: waiting on the deletion question with the device idle (T11 validate proof could have run meanwhile; it did not).
+- Done today: approved deletions (52.3 GB, all Tier 2 checks passed; free 67 GB).
+- In progress: T10 8192 compiles B, C, V → bench n=3 (box to ~21:45 ET). Then T11 validate proof; T4 at 4096 only if it fits before Fri 12:00; Q5 T6 by Fri 12:00.
+- Blockers: none.

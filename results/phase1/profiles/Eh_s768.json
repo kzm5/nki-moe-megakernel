@@ -1,0 +1,26 @@
+{
+ "Eh_s768_b128": {
+  "wall_us": 199.33803922916664,
+  "sync_us": 56.70973791666666,
+  "dma_active_us": 122.12627904166668,
+  "tensor_us": 62.745527687499994,
+  "cc_us": 24.973710979166665,
+  "vector_us": 51.661368375,
+  "scalar_us": 35.77457916666666,
+  "gpsimd_us": 55.978003145833334,
+  "all_rank_graph_ms": [
+   17.24,
+   9.57,
+   70.45,
+   87.19
+  ],
+  "graph_ms": 9.568225882999998,
+  "dma_packets_per_layer": 41969.270833333336,
+  "dma_avg_packet_bytes": 792.5224814782641,
+  "hbm_read_mb_per_layer": 33.11828383333333,
+  "spill_reload_bytes": 360320.0,
+  "spill_save_bytes": 135176.0,
+  "cc_op_count": 101.0,
+  "n_ranks": 4
+ }
+}

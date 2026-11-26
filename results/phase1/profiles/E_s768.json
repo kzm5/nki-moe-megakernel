@@ -1,0 +1,50 @@
+{
+ "E_s768_b128": {
+  "wall_us": 231.29687818750003,
+  "sync_us": 62.01049397916666,
+  "dma_active_us": 142.68948095833335,
+  "tensor_us": 64.91201577083332,
+  "cc_us": 25.06699510416667,
+  "vector_us": 58.446679625,
+  "scalar_us": 36.97664341666667,
+  "gpsimd_us": 57.72713289583333,
+  "all_rank_graph_ms": [
+   20.63,
+   11.1,
+   54.37,
+   71.13
+  ],
+  "graph_ms": 11.102250153000002,
+  "dma_packets_per_layer": 44169.208333333336,
+  "dma_avg_packet_bytes": 753.3040419372093,
+  "hbm_read_mb_per_layer": 33.11880133333333,
+  "spill_reload_bytes": 360320.0,
+  "spill_save_bytes": 135176.0,
+  "cc_op_count": 101.0,
+  "n_ranks": 4
+ },
+ "E_s768_b768": {
+  "wall_us": 231.31460383333334,
+  "sync_us": 62.0585829375,
+  "dma_active_us": 142.26301114583333,
+  "tensor_us": 64.65087185416667,
+  "cc_us": 25.029078479166667,
+  "vector_us": 58.328232250000006,
+  "scalar_us": 36.9021304375,
+  "gpsimd_us": 57.774146395833334,
+  "all_rank_graph_ms": [
+   23.05,
+   11.1,
+   54.56,
+   71.59
+  ],
+  "graph_ms": 11.103100984000001,
+  "dma_packets_per_layer": 44169.208333333336,
+  "dma_avg_packet_bytes": 753.3040419372093,
+  "hbm_read_mb_per_layer": 33.11880133333333,
+  "spill_reload_bytes": 360320.0,
+  "spill_save_bytes": 135176.0,
+  "cc_op_count": 101.0,
+  "n_ranks": 4
+ }
+}

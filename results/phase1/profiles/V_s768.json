@@ -1,0 +1,26 @@
+{
+ "V_s768_b128": {
+  "wall_us": 187.08052364583332,
+  "sync_us": 58.817407791666675,
+  "dma_active_us": 122.0720884375,
+  "tensor_us": 58.43058627083334,
+  "cc_us": 21.647735812500002,
+  "vector_us": 51.13328293749999,
+  "scalar_us": 29.816776208333334,
+  "gpsimd_us": 56.629772270833335,
+  "all_rank_graph_ms": [
+   20.18,
+   8.98,
+   51.39,
+   68.9
+  ],
+  "graph_ms": 8.979865135,
+  "dma_packets_per_layer": 42787.645833333336,
+  "dma_avg_packet_bytes": 801.8177053637464,
+  "hbm_read_mb_per_layer": 33.629916916666666,
+  "spill_reload_bytes": 19328.0,
+  "spill_save_bytes": 36872.0,
+  "cc_op_count": 101.0,
+  "n_ranks": 4
+ }
+}

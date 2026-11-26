@@ -1,0 +1,11 @@
+{
+ "note": "Transcribed from FINDINGS.md (Q3 T4 entries, Nov 20-23) for facts recorded only in prose; everything else in the agent-study table is computed by tools/make_figures.py from results/phase1/t4/<run>_<iter>/ and t4/reports/.",
+ "base_harness_p50_ms": {"value": 10.311, "source": "FINDINGS 2026-11-20 Q3 T4 harness sanity (agent_base_1)"},
+ "runs": {
+  "a1": {"setup": "A", "budget_start_utc": "2026-11-20T03:42:00Z", "wall_min": 360, "idle_min": 0, "interventions": 0, "guard_blocks": 0, "other_blocked": 2, "forced_handbacks": 0, "tooling_failures": [], "source": "FINDINGS Q3 T4 run A1"},
+  "c1": {"setup": "C", "budget_start_utc": "2026-11-20T10:21:00Z", "wall_min": 317, "idle_min": 55, "interventions": 2, "guard_blocks": 1, "other_blocked": 3, "forced_handbacks": 1, "tooling_failures": ["runtime forced hand-back (resumed; deadline +55 min)", "guard-hook false positive"], "source": "FINDINGS 2026-11-20 05:21 → 10:38 ET, Q3 T4 run C1"},
+  "a2": {"setup": "A", "budget_start_utc": "2026-11-20T15:50:00Z", "wall_min": 317, "idle_min": 0, "interventions": 0, "guard_blocks": 0, "other_blocked": 1, "forced_handbacks": 0, "tooling_failures": [], "source": "FINDINGS 2026-11-20 10:50 → 16:08 ET, Q3 T4 run A2"},
+  "c2": {"setup": "C", "budget_start_utc": "2026-11-20T21:09:00Z", "wall_min": 140, "idle_min": 2, "interventions": 2, "guard_blocks": 0, "other_blocked": null, "forced_handbacks": 2, "tooling_failures": ["runtime forced hand-backs (2)", "stopped by the usage limit at 23:29 UTC (partial run)"], "source": "FINDINGS 2026-11-22 17:30 ET resume entry and 2026-11-20 A2/C2 entry"},
+  "c2r": {"setup": "C", "budget_start_utc": "2026-11-22T22:36:00Z", "wall_min": 268, "idle_min": 0, "interventions": 0, "guard_blocks": 0, "other_blocked": 0, "forced_handbacks": 0, "tooling_failures": [], "source": "FINDINGS 2026-11-22 17:36 → 22:03 ET, Q3 T4 run C2r"}
+ }
+}

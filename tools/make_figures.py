@@ -284,12 +284,14 @@ def main():
                 rows.append({"kind": "latency", "config": c, "seq": s, "value": x["p50"], "std": x["p50_sd"], "n": x["n"],
                              "note": "T10 (final 8192 numbers)" if s == 8192 else "T6"})
     for c in ("xla", "B", "C", "V"):
-        for sub, f, note in (("v1 corpus (positions < 768)", f"t4_s2048/{c}.json", "frozen v1.1"),
-                             ("long corpus (positions 1,400-1,958)", f"corpus_long/reports/{c}_s2048.json", "supplementary")):
+        for s, sub, f, note in ((2048, "v1 corpus (positions < 768)", f"t4_s2048/{c}.json", "frozen v1.1"),
+                                (4096, "v1 corpus (positions < 768)", f"t4_s4096/{c}.json", "frozen v1.1"),
+                                (2048, "long corpus (positions 1,400-1,958)", f"corpus_long/reports/{c}_s2048.json",
+                                 "supplementary")):
             if os.path.exists(f"{P1}/{f}"):
                 r = J(f)
                 r = r.get("report", r)
-                rows.append({"kind": f"validation 2048, {sub}", "config": c, "seq": 2048,
+                rows.append({"kind": f"validation {s}, {sub}", "config": c, "seq": s,
                              "value": r["rows"]["logits_tf"]["kl_ratio"], "std": None, "n": r["rows"]["logits_tf"]["n_positions"],
                              "note": f"{note}: {'PASS' if r['pass'] else 'FAIL'}, KL ratio vs XLA"})
     if rows:

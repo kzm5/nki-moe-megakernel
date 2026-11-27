@@ -57,3 +57,10 @@
 - Done today: approved deletions (52.3 GB, all Tier 2 checks passed; free 67 GB).
 - In progress: T10 8192 compiles B, C, V → bench n=3 (box to ~21:45 ET). Then T11 validate proof; T4 at 4096 only if it fits before Fri 12:00; Q5 T6 by Fri 12:00.
 - Blockers: none.
+
+## 2026-11-27 (Fri, 07:00 ET) — Q4b done, Q5 T6 running
+- Done: **T10 8192** — B 11.398, V 10.313 ms (n=2; V − B −9.5%): the lead keeps growing with context, more slowly (7.7 / 8.2 / 9.5% at 2048 / 4096 / 8192). C compiles but hangs at runtime at 8192 (one attempt); the hang wedged the device (HBM init failures) until a Neuron driver reload. Eh not attempted (box).
+- Done: **T11** reproducibility package; proof from clean worktrees — `validate` B@768 PASS and bit-identical 64/64 to the original capture; `bench` 10.701 vs ledger 10.524 ± 0.088 ms. Two script bugs found by the proof, fixed.
+- Done: **T4 at 4096** — XLA, B, C, V pass v1.1 (positions < 768).
+- In progress: **T6** final session (started 00:55 ET): 768 round 4 of 5; interim 768 p50 A ~15.10, B ~10.51, C ~10.24, E ~12.17, Eh ~10.62, V ~10.04 ms. Expected done ~Sat 01:00 ET, then T7 (script ready) and T8.
+- Disk 14 GB free (T6 adds logs only). Blockers: none.

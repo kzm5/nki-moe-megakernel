@@ -2,6 +2,15 @@
 
 Queue: [`docs/queues/Q1Q2.md`](../../docs/queues/Q1Q2.md). State: [`QUEUE_STATE.md`](QUEUE_STATE.md). Ledger: `~/runs/ledger.jsonl` → [`ledger.jsonl`](ledger.jsonl). Times ET unless marked UTC. Q3 (Nov 19–27, [`docs/queues/Q3.md`](../../docs/queues/Q3.md)): newest Q3 entries directly below.
 
+## 2026-11-26 21:47 → 22:13 ET — Q4b T11: reproducibility package, proof (Measured)
+
+Package: `scripts/reproduce/reproduce.sh {env|build|validate|bench|figures}` + `config.sh` (configs × lengths × n, paths, per-build overrides), helpers `check_frozen.py`, `compare_val.py`, `summarize.py`; `docs/REPRODUCE.md` (AMI and fresh-DLAMI starting points, expected runtimes / disk / RAM, pitfalls, trn3 pointer). Proof config `~/runs/repro_proof_config.sh` (B at 768, n=1, existing B build).
+- `env` (Nov 24): all checks pass except free disk (< 30 GB at the time) — correct.
+- **`bench`** (clean worktree `59b909a`, Nov 24 23:08 UTC): B@768 **10.701 ms** vs ledger 10.524 ± 0.088 (n=18), +0.18 ms (n=1; Hypothesis: day-to-day / first-run drift, see the Nov 26 entry).
+- **`validate`** (clean worktree `508bd22`, Nov 27 02:48–03:12 UTC, 24 min): **PASS v1.1, frozen_ok, teacher-forced scores bit-identical to the original B capture on 64/64 prompts**, KL ratio 0.8706 and ppl 8.3790 = the frozen B report (`reports_v11/libmoe.json`).
+- Two bugs found by the proof and fixed: `validate` never created its output dir (`c2becba`), and it ran the venv's Python without activating the venv (`libneuronpjrt-path` not on PATH; `508bd22`). The fresh-DLAMI path is documented but not run.
+- Ledger: `p1_q4b_t11_proof_{bench,validate}_B_s768_*`.
+
 ## 2026-11-26 11:45 → 21:47 ET — Q4b T10: 8192 sweep (Measured)
 
 `tools/q4b_t10.sh` (compiles) → `tools/q4b_t10_bench.sh` / `tools/bench_q4.sh q4b_t10 8192` (separate processes, page cache pre-warmed, one order per round) → `results/phase1/bench_q4b_t10.json`. Box 10 h, used ~10 h.

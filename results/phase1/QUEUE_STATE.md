@@ -83,7 +83,7 @@ Updated: 2026-11-24 16:50 ET. **Q4 done** (T4 at 4096 not run: needs a deletion)
 | T5 H2.4 all-reduce precision | done Nov 23 20:30: emulated bf16-per-add AR +43% KL vs fp32 sum; on device C and V bit-identical on 62/64 prompts (KL −0.2%) | `tools/h24_allreduce.py`, `h24.json`, `h24_C_vs_V.json`, FINDINGS T5 |
 | T9 long-context corpus (Q4b, 10 h box) | done Nov 24 18:10 (1 h 15 min): XLA, B, C, V all pass v1.1 rows on the supplementary corpus at 2048 (positions 1,400–1,958); C = V on 16/16 prompts | `corpus_long/`, `FROZEN_long.md`, `tools/{corpus_long,validate_long}.py`, `tools/q4b_t9.sh` |
 | T10 8192 sweep (Q4b, 10 h box) | done Nov 26 21:47: B 11.398, V 10.313 ms (n=2; V − B -9.52%: lead keeps growing); C compiles but hangs at runtime (wedged the device; driver reload); Eh not attempted | `bench_q4b_t10.json`, `tools/q4b_t10*.sh`, FINDINGS T10 |
-| T11 reproducibility package (Q4b, 6 h box) | written (`4a7f122`, fix `c2becba`); proof: bench B@768 n=1 10.701 vs ledger 10.524 ± 0.088 (+0.18 ms); validate proof pending (after T10) | `scripts/reproduce/`, `docs/REPRODUCE.md` |
+| T11 reproducibility package (Q4b, 6 h box) | done Nov 26 22:13: proof from clean worktrees — validate B@768 PASS, bit-identical 64/64 to the original capture; bench 10.701 vs ledger 10.524 ± 0.088 | `scripts/reproduce/`, `docs/REPRODUCE.md`, FINDINGS T11 |
 | T6 final interleaved session | queued after T11 proof + T4 4096 (`tools/q4b_after.sh`): started early Nov 24 16:40, stopped 16:57 during the first load (Q4b added) | `tools/q5_t6.sh` |
 | T7 tables and figures | pending (Q5) | – |
 | T8 freeze | pending (Q5) | – |

@@ -20,3 +20,4 @@
 - 2026-11-24 17:10 ET — Q4b added: T6 stopped (no data lost); T9 long-context corpus started. **Waiting on Kevin:** deletion approval for T10 (`results/phase1/deletion_candidates_q4b.md`, Tier 1 = 22.8 GB).
 - 2026-11-24 18:10 ET — Q4b T9 done: supplementary long-context validation at 2048, XLA/B/C/V all pass v1.1 rows. T11 package written (proof run next). T10 waits for disk approval (17 GB free).
 - 2026-11-26 11:50 ET — deletions done (52.3 GB, approved); Q4b T10 (8192) running; T9 done; T11 written, validate proof pending. Session was idle Nov 24 18:15 → Nov 26 11:38 waiting on the deletion answer.
+- 2026-11-26 21:50 ET — Q4b T10 done: at 8192 V 10.313 vs B 11.398 ms (−9.5%; lead keeps growing); C hangs at runtime at 8192 (device recovered by driver reload). Next: T11 validate proof, T4 at 4096, then Q5 T6.

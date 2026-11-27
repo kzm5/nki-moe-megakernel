@@ -2,6 +2,23 @@
 
 Queue: [`docs/queues/Q1Q2.md`](../../docs/queues/Q1Q2.md). State: [`QUEUE_STATE.md`](QUEUE_STATE.md). Ledger: `~/runs/ledger.jsonl` → [`ledger.jsonl`](ledger.jsonl). Times ET unless marked UTC. Q3 (Nov 19–27, [`docs/queues/Q3.md`](../../docs/queues/Q3.md)): newest Q3 entries directly below.
 
+## 2026-11-26 11:45 → 21:47 ET — Q4b T10: 8192 sweep (Measured)
+
+`tools/q4b_t10.sh` (compiles) → `tools/q4b_t10_bench.sh` / `tools/bench_q4.sh q4b_t10 8192` (separate processes, page cache pre-warmed, one order per round) → `results/phase1/bench_q4b_t10.json`. Box 10 h, used ~10 h.
+
+| Config | Compile (s) | Runtime at 8192 | TKG p50 (ms) | p99 (ms) | n |
+|---|---|---|---|---|---|
+| B lib MoE (`traced_libmoe_trn2_229_s8192_greedy_sweep`) | 2,160 | OK | **11.398 ± 0.005** | 11.932 | 2 |
+| C megakernel (`traced_nki_trn2_229_s8192_greedy_sweep`) | 2,231 | **hang** in the 8192 TKG bucket (`_tp0_bk4`): "Failed to receive MODEL_STOP notification from all TOPSPs", then `execution timeout (30000 ms)` and `FATAL-RT-UNDEFINED-STATE` on all four cores | – | – | 0 (1 attempt) |
+| V (`traced_V_q3final_s8192`, `35309c3`, `MK_AGENT_VARIANT=1`) | 1,984 | OK (after device recovery) | **10.313 ± 0.006** | 10.631 | 2 |
+| Eh | not attempted (box) | | | | |
+
+- **Measured: V − B at 8192 = -1.085 ms (-9.52%; 2 × pooled std 0.010; paired -1.092 / -1.078).** Answer to T10's question: **the megakernel family's lead over B keeps growing at 8192**, but more slowly: V's gain over B is 7.7% / 8.2% / 9.5% at 2048 / 4096 / 8192 (T2 session for 2048/4096). V stays nearly flat (10.145 / 10.192 / 10.313 ms); B rises (10.991 / 11.103 / 11.398). The hypothesis that the full-cache KV read would reverse the lead at 8192 is not supported for V. Caveat: 2048/4096 and 8192 are different sessions; T6 re-measures 2048/4096.
+- **Measured: C hangs at runtime at 8192** (one attempt, during its compile run's benchmark, 19:58 UTC). V uses the same attention kernel and runs, so the flash-tiled attention path alone is not the trigger. Hypothesis (untested): C's per-layer SB2SB all-reduce collectives at the 8192 bucket (V replaces them with all-gather + local sum); or a non-deterministic hang. Not retried inside the box: a second hang would have wedged the device again.
+- **Device wedged after C's hang:** the next three processes (V's compile-run benchmark, B r1, V r1) failed at device init (`tdrv_hbm_scrub_wait: HBM 0 initialization/scrubbing failed with return code -1`); recorded in the ledger as failures (`*_attempt1`), not attributed to B or V. Recovered by reloading the Neuron driver (`sudo rmmod neuron && sudo modprobe neuron`, 21:02 UTC, no processes holding the device); B r1 then ran normally. Cost ~1.5 h.
+- Runs at 8192 take ~83–85 min each (load ~70 min; page cache cold after the driver reload, then 8192 builds' load), vs ~35–50 min at 4096.
+- B's compile-run benchmark (not counted): 11.482 ms.
+
 ## 2026-11-24 18:15 → 2026-11-26 11:50 ET — Q4b: idle wait, approved deletions, T10 started, T11 proof (bench) (Measured)
 
 - **Idle 41 h (Nov 24 18:15 → Nov 26 11:38 ET):** the session waited on the deletion question for T10 with the device idle. The T11 `validate` proof (no approval needed) could have run in that window and did not; T6 could not start (Q4b first). Q4 itself finished Nov 24 16:50, before its Thu 12:00 deadline.

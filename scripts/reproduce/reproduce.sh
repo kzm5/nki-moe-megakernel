@@ -6,6 +6,8 @@ REPO=$(cd "$(dirname "$0")/../.." && pwd)
 cmd=${1:?usage: reproduce.sh env|build|validate|bench|figures [config]}
 # shellcheck disable=SC1090
 source "${2:-$REPO/scripts/reproduce/config.sh}"
+# shellcheck disable=SC1091
+[ -f "$VENV/activate-neuron.sh" ] && source "$VENV/activate-neuron.sh"
 FZ=$REPO/tools/validator
 CORPUS=$REPO/results/phase1/corpus/corpus.json
 COMMON=(--on-device-sampling --top-k 1 --do-sample '' --output-logits)

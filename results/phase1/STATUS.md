@@ -22,3 +22,4 @@
 - 2026-11-26 11:50 ET — deletions done (52.3 GB, approved); Q4b T10 (8192) running; T9 done; T11 written, validate proof pending. Session was idle Nov 24 18:15 → Nov 26 11:38 waiting on the deletion answer.
 - 2026-11-26 21:50 ET — Q4b T10 done: at 8192 V 10.313 vs B 11.398 ms (−9.5%; lead keeps growing); C hangs at runtime at 8192 (device recovered by driver reload). Next: T11 validate proof, T4 at 4096, then Q5 T6.
 - 2026-11-26 22:15 ET — Q4b T11 done (validate proof bit-identical 64/64). T4 at 4096 running (~3.5 h), then Q5 T6 (~30 h).
+- 2026-11-27 01:00 ET — Q4 T4 at 4096 done (XLA/B/C/V pass). Q4 + Q4b complete. Q5 T6 final session started 00:55 ET (54 runs).

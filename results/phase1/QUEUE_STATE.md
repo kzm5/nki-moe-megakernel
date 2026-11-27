@@ -66,7 +66,7 @@ Updated: 2026-11-23 16:10 ET. **Q3 done** (all tasks; `SUMMARY_Q3.md`), ahead of
 
 # Q4Q5 queue state (queue: `docs/queues/Q4Q5.md`, read-only; Nov 24–29)
 
-Updated: 2026-11-24 16:50 ET. **Q4 done** (T4 at 4096 not run: needs a deletion). Deletions approved and done Nov 26 (52.3 GB). Q4b added by Kevin (Nov 24, `1bead66`): runs before Q5 (Q5 starts by Fri Nov 27 12:00). T6 stopped at its first load (aborted, no data). Deadlines (ET): Q4 Thu Nov 26 12:00; Q5 Sun Nov 29 18:00. trn3 day shelved (Kevin, Nov 23; queue `f6176a8`): no T1 merge deadline, no trn3 work.
+Updated: 2026-11-27 01:00 ET. **Q4 and Q4b done; Q5 T6 running.** **Q4 done** (T4 at 4096 not run: needs a deletion). Deletions approved and done Nov 26 (52.3 GB). Q4b added by Kevin (Nov 24, `1bead66`): runs before Q5 (Q5 starts by Fri Nov 27 12:00). T6 stopped at its first load (aborted, no data). Deadlines (ET): Q4 Thu Nov 26 12:00; Q5 Sun Nov 29 18:00. trn3 day shelved (Kevin, Nov 23; queue `f6176a8`): no T1 merge deadline, no trn3 work.
 
 ## Environment
 - Results in the main checkout (`phase0/trn2-setup`); kernel work in worktree `.claude/worktrees/q4/t1` (branch `q4/t1-merge-v`). Frozen validator still run from the q1q2 worktree.
@@ -79,11 +79,11 @@ Updated: 2026-11-24 16:50 ET. **Q4 done** (T4 at 4096 not run: needs a deletion)
 | T2 Eh at 2048/4096 | done Nov 24 16:37: Eh − C +0.399 / +0.357 ms (> 2σ), Eh − B −0.199 / −0.363 at 2048 / 4096 → context-growing gain is attention (Eh gets 33% / 50% of C − B); fusion side ~constant 0.35–0.40 ms | `bench_q4_t2.json`, FINDINGS T2 |
 | T3 V determinism (3 captures) | done Nov 23 19:55: captures 3–5 bit-identical to captures 1 and 2 (7,264/7,264 each); V eligible | `results/phase1/t4/c1_2_r2r{3,4,5}*.json` |
 | (chain) | done Nov 24 16:37 (`CHAIN_DONE`) | `tools/q4_chain.sh`, log `~/runs/p1/q4_chain.log` |
-| T4 validate 2048 builds | 2048 done Nov 24 00:22: XLA, B, C, V all PASS v1.1 (positions < 768 only); 4096 running Nov 27 (after T11 proof; fits before Fri 12:00) | `results/phase1/t4_s2048/`, `~/runs/p1/val/*_s2048_plain` |
+| T4 validate 2048/4096 builds | done: 2048 Nov 24, 4096 Nov 27 00:55 — XLA, B, C, V all PASS v1.1 at both (positions < 768 only) | `results/phase1/t4_s2048/`, `t4_s4096/` |
 | T5 H2.4 all-reduce precision | done Nov 23 20:30: emulated bf16-per-add AR +43% KL vs fp32 sum; on device C and V bit-identical on 62/64 prompts (KL −0.2%) | `tools/h24_allreduce.py`, `h24.json`, `h24_C_vs_V.json`, FINDINGS T5 |
 | T9 long-context corpus (Q4b, 10 h box) | done Nov 24 18:10 (1 h 15 min): XLA, B, C, V all pass v1.1 rows on the supplementary corpus at 2048 (positions 1,400–1,958); C = V on 16/16 prompts | `corpus_long/`, `FROZEN_long.md`, `tools/{corpus_long,validate_long}.py`, `tools/q4b_t9.sh` |
 | T10 8192 sweep (Q4b, 10 h box) | done Nov 26 21:47: B 11.398, V 10.313 ms (n=2; V − B -9.52%: lead keeps growing); C compiles but hangs at runtime (wedged the device; driver reload); Eh not attempted | `bench_q4b_t10.json`, `tools/q4b_t10*.sh`, FINDINGS T10 |
 | T11 reproducibility package (Q4b, 6 h box) | done Nov 26 22:13: proof from clean worktrees — validate B@768 PASS, bit-identical 64/64 to the original capture; bench 10.701 vs ledger 10.524 ± 0.088 | `scripts/reproduce/`, `docs/REPRODUCE.md`, FINDINGS T11 |
-| T6 final interleaved session | queued after T11 proof + T4 4096 (`tools/q4b_after.sh`): started early Nov 24 16:40, stopped 16:57 during the first load (Q4b added) | `tools/q5_t6.sh` |
+| T6 final interleaved session | running since Nov 27 00:55 ET: 768 n=5 A B C E Eh V, then 2048/4096 n=3 B C V Eh (54 runs) | `tools/q5_t6.sh`, log `~/runs/p1/bench_q5_t6.log` |
 | T7 tables and figures | pending (Q5) | – |
 | T8 freeze | pending (Q5) | – |

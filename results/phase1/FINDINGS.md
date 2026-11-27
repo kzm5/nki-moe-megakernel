@@ -2,6 +2,20 @@
 
 Queue: [`docs/queues/Q1Q2.md`](../../docs/queues/Q1Q2.md). State: [`QUEUE_STATE.md`](QUEUE_STATE.md). Ledger: `~/runs/ledger.jsonl` → [`ledger.jsonl`](ledger.jsonl). Times ET unless marked UTC. Q3 (Nov 19–27, [`docs/queues/Q3.md`](../../docs/queues/Q3.md)): newest Q3 entries directly below.
 
+## 2026-11-26 22:13 → 2026-11-27 00:55 ET — Q4 T4 at 4096: frozen validator v1.1 on the 4096 builds (Measured)
+
+Same procedure as at 2048 (`tools/q4_chain.sh t4_4096`): XLA 4096 compiled here (`traced_xla_trn2_229_s4096_greedy`, job 76 min), then B, C, V (sweep / Q3-final builds); runs `p1_q4_t4_{xla,B,C,V}_s4096`, all `EXIT_STATUS=0`. Reports in `results/phase1/t4_s4096/`. Run because it fit before Q5's Fri 12:00 start (Kevin, Nov 26).
+
+| Build at 4096 | v1.1 | mean KL vs golden | KL ratio vs XLA 4096 | KL ratio vs XLA 768 | top-1 = golden | worst pos max KL / gross | ppl | run-to-run (in-process) |
+|---|---|---|---|---|---|---|---|---|
+| XLA | PASS | 2.2588e-03 | 1.0000 | 0.9996 | 98.747% | 0.833 / 0 | 8.3933 | 64/64 |
+| B lib MoE | PASS | 1.9331e-03 | 0.8558 | 0.8554 | 98.678% | 0.564 / 0 | 8.3790 | 64/64 |
+| C megakernel | PASS | 2.0719e-03 | 0.9173 | 0.9169 | 98.678% | 0.858 / 0 | 8.3841 | 64/64 |
+| V (C1 iter 2) | PASS | 2.0648e-03 | 0.9141 | 0.9137 | 98.678% | 0.858 / 0 | 8.3841 | 64/64 |
+
+- **Measured: all four 4096 builds pass v1.1**, at positions < 768 only (v1 corpus limit; the long corpus was validated at 2048 only, T9).
+- An earlier start (02:47 UTC) was stopped one minute into the XLA compile to fix `reproduce.sh` first; ledger `p1_q4_t4_xla_s4096_aborted_*`.
+
 ## 2026-11-26 21:47 → 22:13 ET — Q4b T11: reproducibility package, proof (Measured)
 
 Package: `scripts/reproduce/reproduce.sh {env|build|validate|bench|figures}` + `config.sh` (configs × lengths × n, paths, per-build overrides), helpers `check_frozen.py`, `compare_val.py`, `summarize.py`; `docs/REPRODUCE.md` (AMI and fresh-DLAMI starting points, expected runtimes / disk / RAM, pitfalls, trn3 pointer). Proof config `~/runs/repro_proof_config.sh` (B at 768, n=1, existing B build).

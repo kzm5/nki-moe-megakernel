@@ -1,0 +1,6 @@
+run,setup,iterations,compiled,compile_failures,pass_v1.1,nondeterministic,eligible,best_eligible_ms,best_vs_base_ms,wall_min,idle_min,active_min,interventions,guard_blocks,tooling_failures
+a1,A,3,3,0,3,0,3,10.101,-0.20999999999999908,360,0,360,0,0,none
+c1,C,3,3,0,2,1,1,10.023,-0.28800000000000026,317,55,262,2,1,runtime forced hand-back (resumed; deadline +55 min); guard-hook false positive
+a2,A,4,3,1,3,0,3,10.06,-0.25099999999999945,317,0,317,0,0,none
+c2,C,2,2,0,2,0,2,10.035,-0.2759999999999998,140,2,138,2,0,runtime forced hand-backs (2); stopped by the usage limit at 23:29 UTC (partial run)
+c2r,C,2,2,0,2,1,1,10.082,-0.2289999999999992,268,0,268,0,0,none

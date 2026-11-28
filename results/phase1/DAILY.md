@@ -64,3 +64,9 @@
 - Done: **T4 at 4096** — XLA, B, C, V pass v1.1 (positions < 768).
 - In progress: **T6** final session (started 00:55 ET): 768 round 4 of 5; interim 768 p50 A ~15.10, B ~10.51, C ~10.24, E ~12.17, Eh ~10.62, V ~10.04 ms. Expected done ~Sat 01:00 ET, then T7 (script ready) and T8.
 - Disk 14 GB free (T6 adds logs only). Blockers: none.
+
+## 2026-11-28 (Sat, 03:40 ET) — Q5 done, results frozen
+- Done: T6 final session (54/54): 768 A 15.116, B 10.522, C 10.238, E 12.183, Eh 10.632, V 10.052 ms → **Gate 4 not met at 768 (V − B 4.47%)**; 2048 / 4096 V gain 6.67 / 9.22%; 8192 (T10) 9.52%.
+- Done: T7 (`results/final/TABLES.md`, 3 figures + 6 tables with CSVs) and T8 (`SUMMARY_FINAL.md`, `NUMBERS.md` with 82 sourced numbers, RESUME, transcripts).
+- Plan discrepancies recorded in FINDINGS (fusion is worth −0.26 to −0.40 ms at every length, contrary to the Phase 0 headline; C − B at 2048 is 4.89%, not 5.23%).
+- Device idle; tree clean; everything pushed. Ready for the final AMI.

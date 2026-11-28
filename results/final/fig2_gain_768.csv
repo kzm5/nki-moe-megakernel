@@ -1,0 +1,6 @@
+step,what,delta_ms,two_pooled_std
+B -> E,unfused attention kernel (+ call cost),1.660752296447754,0.052497854639564516
+E -> Eh,per-call setup hoisted,-1.550745964050293,0.04022758057008506
+Eh -> C,"fusion (call boundary, MoE kernel)",-0.39467811584472656,0.03458631096990316
+C -> V,collectives (AG + local sum),-0.18532276153564453,0.06297342848467789
+B -> C (total),C's gain over B,-0.2846717834472656,0.048311276217266344

@@ -1,5 +1,14 @@
 # Resuming Phase 0 on a fresh instance from this image
 
+## Final state (2026-11-28, Q4 + Q4b + Q5 done; results frozen) — read this first
+- **Results:** `results/final/SUMMARY_FINAL.md` (one page), `NUMBERS.md` (every number with its ledger id / report field), `TABLES.md` + figures/CSVs. Regenerate: `python tools/make_figures.py --out results/final && python tools/make_numbers.py --out results/final/NUMBERS.md` (inputs: `results/phase1/ledger.jsonl` and reports under `results/phase1/`).
+- **Reproduce:** `scripts/reproduce/reproduce.sh {env|build|validate|bench|figures}` + `docs/REPRODUCE.md` (AMI and fresh-DLAMI starting points, costs, pitfalls). Proven on the AMI from a clean worktree (validate bit-identical 64/64).
+- **Code state:** V (all-gather + local fp32 sum collectives) merged into `phase0/trn2-setup` as `a62b8af`, gated by `MK_AGENT_VARIANT=1` (default off). Eh lives only on branch `q3/t3-fusion` (`ATTN_E_HOIST=1`). Agent-study branches `q3/t4-*` on `mine`.
+- **Validator:** frozen v1.1 (`results/phase1/FROZEN.md`); supplementary long-context corpus frozen separately (`FROZEN_long.md`, scored with `tools/validate_long.py`).
+- **Builds kept** (`~/qwen-30b-a3b/`): A/B/C/E/Eh/V at 768, B/C/V/Eh at 2048 and 4096, XLA at 2048/4096, B/C/V at 8192 (C hangs at runtime at 8192 and wedges the device: recover with `sudo rmmod neuron && sudo modprobe neuron`). C at 768 has pre-sharded `weights/` (59 GB).
+- **Jobs:** one device job at a time via `~/runs/device.lock`; `tools/bench_q4.sh TAG SEQ N CONFIG...` (interleaved bench), `tools/bench_q4_stats.py`, `tools/q4_chain.sh`, `tools/q4b_t9.sh`. Transcripts in `~/runs/transcripts/`.
+- trn3: shelved; `docs/queues/TRN3.md`, `scripts/trn3_bringup.{sh,md}`.
+
 ## Q3 update (2026-11-23, Q3 done) — read this first
 - State: `results/phase1/QUEUE_STATE.md` (Q3 section), `SUMMARY_Q3.md`. Results worktree `.claude/worktrees/q3` (branch `worktree-q3`, pushed to `phase0/trn2-setup`); kernel branches `q3/t3-fusion`, `q3/t4-{base,a1,c1,a2,c2,c2r}` on `mine`, not merged. Best collectives variant V = `35309c3` (`q3/t4-c1`), env `MK_AGENT_VARIANT=1`; builds `~/qwen-30b-a3b/agent_c1_2` (768), `traced_V_q3final_s{2048,4096}`.
 - Agent-study harness `tools/agent_eval.sh SETUP RUN ITER WORKTREE`; final bench `tools/bench_q3_final.sh` (B/C/V, needs `V_WT`, `V_768`). Cross-process determinism check `tools/r2r_rerun.sh` + `tools/r2r_compare.py`.

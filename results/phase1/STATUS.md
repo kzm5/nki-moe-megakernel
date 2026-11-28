@@ -24,3 +24,4 @@
 - 2026-11-26 22:15 ET — Q4b T11 done (validate proof bit-identical 64/64). T4 at 4096 running (~3.5 h), then Q5 T6 (~30 h).
 - 2026-11-27 01:00 ET — Q4 T4 at 4096 done (XLA/B/C/V pass). Q4 + Q4b complete. Q5 T6 final session started 00:55 ET (54 runs).
 - 2026-11-27 07:00 ET — daily written; Q5 T6 at 768 round 4/5; on track for the Sun 18:00 freeze.
+- 2026-11-28 03:40 ET — Q5 done: T6 (54/54), T7 figures, T8 freeze. Gate 4 not met at 768 (4.47%). Ready for final AMI.

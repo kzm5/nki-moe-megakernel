@@ -2,6 +2,31 @@
 
 Queue: [`docs/queues/Q1Q2.md`](../../docs/queues/Q1Q2.md). State: [`QUEUE_STATE.md`](QUEUE_STATE.md). Ledger: `~/runs/ledger.jsonl` → [`ledger.jsonl`](ledger.jsonl). Times ET unless marked UTC. Q3 (Nov 19–27, [`docs/queues/Q3.md`](../../docs/queues/Q3.md)): newest Q3 entries directly below.
 
+## 2026-11-27 00:55 → 2026-11-28 03:30 ET — Q5 T6 final interleaved session, T7 figures, T8 freeze (Measured)
+
+**T6** (`tools/q5_t6.sh` → `tools/bench_q4.sh q5_t6`): one session, one order per round (A B C E Eh V at 768 n=5, then B C V Eh at 2048 and 4096 n=3); 54 runs, all `EXIT_STATUS=0`, Nov 27 00:55 ET → Nov 28 03:01 ET; stats `results/phase1/bench_q5_t6.json`. **This table supersedes all earlier timing numbers** (8192 from Q4b T10).
+
+| Seq | A | B | C | E | Eh | V |
+|---|---|---|---|---|---|---|
+| 768 (n=5) | 15.116 ± 0.027 | 10.522 ± 0.030 | 10.238 ± 0.016 | 12.183 ± 0.022 | 10.632 ± 0.018 | 10.052 ± 0.041 |
+| 2048 (n=3) | – | 10.922 ± 0.002 | 10.388 ± 0.052 | – | 10.726 ± 0.069 | 10.194 ± 0.216 |
+| 4096 (n=3) | – | 11.206 ± 0.095 | 10.468 ± 0.093 | – | 10.725 ± 0.038 | 10.172 ± 0.016 |
+
+p99 768: A 15.665, B 11.292, C 10.777, E 12.654, Eh 11.084, V 10.574. Deltas (ms, 2 × pooled std): 768 C − B -0.285 (0.048), V − B -0.470 (0.072), V − C -0.185 (0.063), E − B +1.661 (0.052), Eh − E -1.551 (0.040), Eh − C +0.395 (0.035), Eh − B +0.110 (0.050); 2048 V − B -0.728 (0.305), Eh − C +0.338 (0.122), Eh − B -0.196 (0.097); 4096 V − B -1.034 (0.136), Eh − C +0.257 (0.142), Eh − B -0.480 (0.144).
+- **Gate 4 at 768: V gain over B 4.47% — not met** (Q3 final: 4.28%). Secondary: 6.67 / 9.22 / 9.52% at 2048 / 4096 / 8192.
+- Fusion side Eh − C: +0.395 / +0.338 / +0.257 ms (768 / 2048 / 4096), all > 2σ, slightly shrinking with context (T2 session: +0.399 / +0.357, flat); the attention side Eh − B: +0.110 / −0.196 / −0.480.
+- V at 2048 has one high round (r3 10.443 vs 10.072 / 10.066), std 0.216; V − C at 2048 is therefore within 2σ (−0.194, 0.314), though rounds 1–2 agree with every other session (−0.26 / −0.33).
+
+**T7** `tools/make_figures.py --out results/final` (ledger + reports; no hand-typed numbers; CSV next to each table/figure): fig1 latency vs length, fig2 768 waterfall B → E → Eh → C → V, tab3 accuracy, fig4/tab4 depth and precision, tab5 profile (B's row from Phase 0; Eh, C, V rows generated Nov 26 from the Q3 NTFFs with `tools/profile_table.py`), tab6 agent study (facts recorded only in prose transcribed in `t4/agent_study_meta.json`), tab7 gates, tab8 swap-chain attribution, tab9 long context. `results/final/TABLES.md`.
+
+**T8** `results/final/SUMMARY_FINAL.md` (one page) and `results/final/NUMBERS.md` (`tools/make_numbers.py`: 82 numbers, each with ledger run ids or report file + field). RESUME updated; transcripts synced to `~/runs/transcripts/`.
+
+**Discrepancies with `docs/RESEARCH_PLAN.md` (rev 54), recorded per the session rules:**
+1. Plan, Phase 0 headline: "Fusion adds nothing measurable on trn2". Final: fusion (Eh → C, same attention kernel with its per-call setup hoisted) is worth −0.395 ms at 768 (> 2σ) and −0.26 to −0.40 ms at every length; it does not grow with context. The Phase 0 statement predates E/Eh.
+2. Plan, Q3 status: "unmodified C does too (5.23% and 6.21%)" at 2048/4096. Final session: C − B 4.89% at 2048 (below 5%) and 6.58% at 4096.
+3. Plan, Q4 status: "Eh is 0.20 ms faster than B but 0.40 ms slower than C" at 2048 (T2 session). Final: Eh − B −0.196, Eh − C +0.338.
+4. Plan: Gate 4 at 768 "4.28%" (Q3 final). Final session: 4.47%. Same verdict (not met).
+
 ## 2026-11-26 22:13 → 2026-11-27 00:55 ET — Q4 T4 at 4096: frozen validator v1.1 on the 4096 builds (Measured)
 
 Same procedure as at 2048 (`tools/q4_chain.sh t4_4096`): XLA 4096 compiled here (`traced_xla_trn2_229_s4096_greedy`, job 76 min), then B, C, V (sweep / Q3-final builds); runs `p1_q4_t4_{xla,B,C,V}_s4096`, all `EXIT_STATUS=0`. Reports in `results/phase1/t4_s4096/`. Run because it fit before Q5's Fri 12:00 start (Kevin, Nov 26).
